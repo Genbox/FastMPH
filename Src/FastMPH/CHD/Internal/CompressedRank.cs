@@ -27,7 +27,7 @@ internal sealed class CompressedRank : IPackable
         uint i, j;
         _valsRemsCount = num;
         _maxVal = valsTable[_valsRemsCount - 1];
-        _remR = Utils.Log2(_maxVal / _valsRemsCount);
+        _remR = (uint)Math.Log(_maxVal / _valsRemsCount, 2);
 
         if (_remR == 0)
             _remR = 1;

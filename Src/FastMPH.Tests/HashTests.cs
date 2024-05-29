@@ -28,8 +28,7 @@ public class HashTests
 
         for (int i = 0; i < values.Length; i++)
         {
-            byte[] value = values[i];
-            uint index = state.Search(value);
+            uint index = state.Search(values[i]);
             Assert.True(uniq.Add(index));
         }
 
@@ -42,6 +41,12 @@ public class HashTests
 
         IHashState<byte[]> unpacked = unpack(packed);
         Assert.Equivalent(state, unpacked);
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            uint index = unpacked.Search(values[i]);
+            Assert.False(uniq.Add(index));
+        }
     }
 
     public static IEnumerable<object[]> GetImpl()

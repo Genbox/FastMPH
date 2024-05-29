@@ -86,7 +86,7 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
     }
 
     /// <summary>
-    /// Deserialize a serialized perfect hash function into a new instance of <see cref="BdzState"/>
+    /// Deserialize a serialized perfect hash function into a new instance of <see cref="BdzState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     public static BdzState<TKey> Unpack(ReadOnlySpan<byte> packed)

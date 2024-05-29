@@ -67,7 +67,7 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     }
 
     /// <summary>
-    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BmzMinimalState"/>
+    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BmzMinimalState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     public static BmzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed)

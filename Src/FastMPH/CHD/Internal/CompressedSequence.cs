@@ -27,7 +27,7 @@ internal sealed class CompressedSequence : IPackable
                 lengths[i] = 0;
             else
             {
-                lengths[i] = Utils.Log2(valsTable[i] + 1);
+                lengths[i] = (uint)Math.Log(valsTable[i] + 1, 2);
                 _totalLength += lengths[i];
             }
         }
@@ -45,7 +45,7 @@ internal sealed class CompressedSequence : IPackable
             _totalLength += lengths[i];
         }
 
-        _remR = Utils.Log2(_totalLength / n);
+        _remR = (uint)Math.Log(_totalLength / n, 2);
 
         if (_remR == 0)
             _remR = 1;

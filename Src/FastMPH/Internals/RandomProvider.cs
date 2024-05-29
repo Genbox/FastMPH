@@ -1,4 +1,4 @@
-﻿namespace Genbox.FastMPH.Compat;
+﻿namespace Genbox.FastMPH.Internals;
 
 public static class RandomProvider
 {

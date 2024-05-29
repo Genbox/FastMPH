@@ -57,7 +57,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Managed", "Managed", "{8311
 	ProjectSection(SolutionItems) = preProject
 		Src\Directory.Build.targets = Src\Directory.Build.targets
 		Src\Directory.Build.props = Src\Directory.Build.props
-		Imports\Readme.md = Imports\Readme.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Local", "Local", "{EF086041-6B4F-402E-A07E-B40E808803C7}"

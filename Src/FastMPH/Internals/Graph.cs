@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Genbox.FastMPH.Compat;
+using Genbox.FastMPH.Internals.Compat;
 using Microsoft.Extensions.Logging;
 using static Genbox.FastMPH.Internals.BitArray;
 

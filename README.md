@@ -9,11 +9,15 @@ A C# port of the minimal perfect hash function library [CMPH](https://cmph.sourc
 ### Features
 
 Supports the following algorithms:
-* BDZ (MPH + PH)
-* BMZ (MPH)
-* CHD (MPH + PH)
-* CHM (MPH)
-* FCH (MPH)
+* [BDZ](https://cmph.sourceforge.net/bdz.html) (MPH + PH)
+* [BMZ](https://cmph.sourceforge.net/bmz.html) (MPH)
+* [CHD](https://cmph.sourceforge.net/chd.html) (MPH + PH)
+* [CHM](https://cmph.sourceforge.net/chm.html) (MPH)
+* [FCH](https://cmph.sourceforge.net/fch.html) (MPH)
+
+Other features:
+* Pack/unpack each hash function to a `Span<byte>`
+* Logging is supported via [Microsoft.Extensions.Logging](https://www.nuget.org/packages/Microsoft.Extensions.Logging/)
 
 ### Example usage
 
@@ -107,6 +111,15 @@ BDZ:
 
 BMZ:
 * Use 2 seeds instead of 3. The third seed was never used.
+
+#### What can I use it for?
+This library implements several PH/MPH functions intended to be used for mapping a value to an integer.
+Its primary use case is for mapping values in hash tables/sets.
+
+It only benefits situations when:
+- Data is completely static
+- Your dataset is too big for other perfect hash functions
+- You are using a mapping table and want to reduce memory usage
 
 ### Benchmarks
 Benchmarks are sorted from fastest to slowest.

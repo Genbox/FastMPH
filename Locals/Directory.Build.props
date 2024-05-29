@@ -1,8 +1,9 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
   <PropertyGroup>
-    <Description>TODO</Description>
-    <PackageTags>TODO</PackageTags>
+    <Description>A C# port of the minimal perfect hash function library CMPH.</Description>
+    <PackageTags>MPHF hash index</PackageTags>
+    <PackageLicenseExpression>LGPL-3.0</PackageLicenseExpression>
   </PropertyGroup>
 
 </Project>

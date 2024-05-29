@@ -1,8 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.CHD.Internal;
-using Genbox.FastMPH.Compat;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Compat;
 using JetBrains.Annotations;
 using static Genbox.FastMPH.CHD.Internal.BitBool;
 
@@ -21,7 +22,7 @@ namespace Genbox.FastMPH.CHD;
 public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMinimalState<TKey>, ChdMinimalSettings>, IHashBuilder<TKey, ChdState<TKey>, ChdSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]out ChdState<TKey>? state, ChdSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out ChdState<TKey>? state, ChdSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new ChdSettings();
         Func<TKey, uint, uint[]> hashCode = HashHelper.GetHashCodeFunc2(comparer);
@@ -114,7 +115,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
     }
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]out ChdMinimalState<TKey>? state, ChdMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out ChdMinimalState<TKey>? state, ChdMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new ChdMinimalSettings();
 

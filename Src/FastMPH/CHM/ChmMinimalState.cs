@@ -73,7 +73,7 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     }
 
     /// <summary>
-    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="ChmMinimalState"/>
+    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="ChmMinimalState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     public static ChmMinimalState<TKey> Unpack(Span<byte> packed)

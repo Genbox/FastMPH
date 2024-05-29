@@ -1,9 +1,6 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
   <ItemGroup>
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2"/>
-    <PackageVersion Include="Genbox.FastHash" Version="1.0.0-alpha.3"/>
-    <PackageVersion Include="System.IO.Hashing" Version="8.0.0"/>
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.1"/>
     <PackageVersion Include="Meziantou.Polyfill" Version="1.0.38" />
   </ItemGroup>

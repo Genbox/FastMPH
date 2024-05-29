@@ -1,5 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
-using Genbox.FastMPH.Compat;
 using Genbox.FastMPH.Internals;
 using JetBrains.Annotations;
 using static Genbox.FastMPH.Internals.BitArray;
@@ -19,7 +19,7 @@ namespace Genbox.FastMPH.CHM;
 public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMinimalState<TKey>, ChmMinimalSettings>
 {
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new ChmMinimalSettings();
         Func<TKey, uint, uint> hashCode = HashHelper.GetHashCodeFunc(comparer);

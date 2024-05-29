@@ -1,6 +1,6 @@
-﻿namespace Genbox.FastMPH.Compat;
+﻿namespace Genbox.FastMPH.Internals.Compat;
 
-public static class Array2
+internal static class Array2
 {
     public static void Fill<T>(T[] array, T value)
     {

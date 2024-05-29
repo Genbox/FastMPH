@@ -10,8 +10,8 @@ namespace Genbox.FastMPH.CHD;
 public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
 {
     private readonly CompressedSequence _cs;
-    internal readonly byte[] OccupTable;
     private readonly Func<TKey, uint, uint[]> _hashCode;
+    internal readonly byte[] OccupTable;
     internal readonly uint NumKeys;
 
     internal ChdState(CompressedSequence cs, uint buckets, uint bins, uint numKeys, uint seed, byte[] occupTable, Func<TKey, uint, uint[]> hashCode)
@@ -83,7 +83,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     }
 
     /// <summary>
-    /// Deserialize a serialized perfect hash function into a new instance of <see cref="ChdState"/>
+    /// Deserialize a serialized perfect hash function into a new instance of <see cref="ChdState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     public static ChdState<TKey> Unpack(ReadOnlySpan<byte> packed)

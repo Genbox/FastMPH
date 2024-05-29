@@ -1,4 +1,5 @@
-using Genbox.FastMPH.Compat;
+using System.Diagnostics.CodeAnalysis;
+using Genbox.FastMPH.Internals.Compat;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.Abstracts;

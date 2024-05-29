@@ -1,7 +1,8 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
-using Genbox.FastMPH.Compat;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Compat;
 using JetBrains.Annotations;
 using static Genbox.FastMPH.Internals.BitArray;
 
@@ -22,7 +23,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
     private const uint BufSize = 1024 * 64;
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]out BmzMinimalState<TKey>? state, BmzMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out BmzMinimalState<TKey>? state, BmzMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new BmzMinimalSettings();
         Func<TKey, uint, uint> hashCode = HashHelper.GetHashCodeFunc(comparer);

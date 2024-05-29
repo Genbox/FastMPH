@@ -1,7 +1,8 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
-using Genbox.FastMPH.Compat;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Compat;
 using JetBrains.Annotations;
 using static Genbox.FastMPH.Internals.BitArray;
 
@@ -20,7 +21,7 @@ namespace Genbox.FastMPH.BDZ;
 public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMinimalState<TKey>, BdzMinimalSettings>, IHashBuilder<TKey, BdzState<TKey>, BdzSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]out BdzState<TKey>? state, BdzSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out BdzState<TKey>? state, BdzSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new BdzSettings();
         HashCode<TKey> hashCode = HashHelper.GetHashCodeFunc3(comparer);
@@ -42,7 +43,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
     }
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new BdzMinimalSettings();
         HashCode<TKey> hashCode = HashHelper.GetHashCodeFunc3(comparer);
@@ -65,7 +66,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         return true;
     }
 
-    private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, bool minimal, double loadFactor, uint iterations, out uint numPartitions, out uint numVertices, out uint seed, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)]out byte[]? lookupTable)
+    private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, bool minimal, double loadFactor, uint iterations, out uint numPartitions, out uint numVertices, out uint seed, [NotNullWhen(true)]out byte[]? lookupTable)
     {
         uint numEdges = (uint)keys.Length;
         numPartitions = (uint)Math.Ceiling(loadFactor * numEdges / 3);

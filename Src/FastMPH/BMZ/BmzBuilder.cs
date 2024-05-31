@@ -43,8 +43,6 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
         uint seed0 = 0;
         uint seed1 = 0;
 
-        //TODO: check the paper for map iterations. I suspect we might be doing something wrong here.
-
         //Genbox: This was hardcoded to 20. I've moved it into settings and have it default to 20.
         uint iterationsMap = settings.MappingIterations;
 
@@ -101,7 +99,6 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
                 if (!graph.NodeIsCritical(i) || GetBit(visited, i))
                     continue;
 
-                //TODO: As settings is constant, we could get rid of the branching with a delegate
                 if (settings.Vertices > 1.14)
                     restartMapping = TraverseCriticalNodes(graph, lookupTable, numEdges, i, ref biggestGValue, ref biggestEdgeValue, usedEdges, visited);
                 else
@@ -276,7 +273,6 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
 
                 while (collision) // lookahead to resolve collisions
                 {
-                    //TODO: Check this condition
                     if (nextGIndex < numUnusedGValues)
                         nextG = unusedGValues[nextGIndex++];
                     else
@@ -320,7 +316,6 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
 
                 nextGIndex--;
 
-                //TODO: Check this condition
                 if (nextGIndex < numUnusedGValues)
                     unusedGValues[nextGIndex] = unusedGValues[--numUnusedGValues];
 
@@ -405,7 +400,6 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
         }
     }
 
-    //TODO: Could be struct
     private sealed class Queue
     {
         private readonly uint _capacity;

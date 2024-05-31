@@ -56,7 +56,6 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         for (int i = 0; i < numKeys; i++)
             items[i] = new Item();
 
-        //TODO: Make configurable via settings
         uint maxProbes = (uint)(Math.Log(numKeys) / Math.Log(2) / 20);
 
         const uint maxProbesDefault = 1 << 20; // default value for max_probes
@@ -75,12 +74,15 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         uint iterations = settings.Iterations;
         uint seed = 0;
 
+        //Genbox: Moved this allocation out of Mapping()
+        MapItem[] mapItems = new MapItem[numKeys];
+
         //Genbox: converted the while loop to a for loop for readability
         for (; iterations > 0; iterations--)
         {
             LogMappingStep(numKeys, numBins);
 
-            if (!ChdBuilder<TKey>.Mapping(numKeys, numBins, numBuckets, keys, hashCode, buckets, items, out uint maxBucketSize, out seed))
+            if (!Mapping(mapItems, numKeys, numBins, numBuckets, keys, hashCode, buckets, items, out uint maxBucketSize, out seed))
             {
                 LogFailed();
                 state = null;
@@ -145,15 +147,9 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         return true;
     }
 
-    private static bool Mapping<T>(uint numKeys, uint numBins, uint numBuckets, ReadOnlySpan<T> keys, HashCode3<T> hashCode, Bucket[] buckets, Item[] items, out uint maxBucketSize, out uint seed)
+    private static bool Mapping<T>(MapItem[] mapItems, uint numKeys, uint numBins, uint numBuckets, ReadOnlySpan<T> keys, HashCode3<T> hashCode, Bucket[] buckets, Item[] items, out uint maxBucketSize, out uint seed)
     {
         maxBucketSize = 0;
-
-        //TODO: Move this allocation out
-        MapItem[] mapItems = new MapItem[numKeys];
-
-        for (int i = 0; i < numKeys; i++)
-            mapItems[i] = new MapItem();
 
         uint mappingIterations = 1000;
 
@@ -175,7 +171,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
                 hashCode(key, seed, hashes);
                 uint g = hashes[0] % numBuckets;
 
-                MapItem mapItem = mapItems[i];
+                ref MapItem mapItem = ref mapItems[i];
                 mapItem.F = hashes[1] % numBins;
                 mapItem.H = (hashes[2] % (numBins - 1)) + 1;
                 mapItem.BucketNum = g;
@@ -189,7 +185,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
             for (i = 1; i < numBuckets; i++)
             {
-                Bucket bucket = buckets[i - 1];
+                ref Bucket bucket = ref buckets[i - 1];
                 buckets[i].ItemsList = bucket.ItemsList + bucket.Size;
                 bucket.Size = 0;
             }
@@ -245,9 +241,6 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         // Store the buckets in a new array which is sorted by bucket sizes
         Bucket[] outputBuckets = new Bucket[numBuckets];
 
-        for (int k = 0; k < numBuckets; k++)
-            outputBuckets[k] = new Bucket();
-
         uint position;
         for (i = 0; i < numBuckets; i++)
         {
@@ -266,9 +259,6 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
         // Store the items according to the new order of buckets.
         Item[] outputItems = new Item[numItems];
-
-        for (int k = 0; k < numItems; k++)
-            outputItems[k] = new Item();
 
         position = 0;
         for (bucketSize = 1; bucketSize <= maxBucketSize; bucketSize++)
@@ -294,7 +284,6 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
     private bool Searching(bool useHeuristics, byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxBucketSize, SortedList[] sortedLists, uint maxProbes, uint[] dispTable)
     {
-        //TODO: use a delegate to point to the correct method to avoid branching
         if (useHeuristics)
             return PlaceBuckets2(keysPerBin, occupTable, numBins, buckets, items, maxBucketSize, sortedLists, maxProbes, dispTable);
 
@@ -422,7 +411,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         {
             for (i = 0; i < size; i++) // placement
             {
-                Item item = items[ptr];
+                ref Item item = ref items[ptr];
 
                 position = (uint)((item.F + ((ulong)item.H * probe0Num) + probe1Num) % n);
 
@@ -437,7 +426,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         {
             for (i = 0; i < size; i++) // placement
             {
-                Item item = items[ptr];
+                ref Item item = ref items[ptr];
 
                 position = (uint)((item.F + ((ulong)item.H * probe0Num) + probe1Num) % n);
                 if (GetBit(occup, position))
@@ -455,7 +444,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             {
                 while (true)
                 {
-                    Item item = items[ptr];
+                    ref Item item = ref items[ptr];
 
                     if (i == 0)
                         break;
@@ -469,7 +458,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             {
                 while (true)
                 {
-                    Item item = items[ptr];
+                    ref Item item = ref items[ptr];
 
                     if (i == 0)
                         break;
@@ -494,11 +483,11 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
     private static bool BucketInsert(Bucket[] buckets, MapItem[] mapItems, Item[] items, uint itemIdx)
     {
-        MapItem tmpMapItem = mapItems[itemIdx];
-        Bucket bucket = buckets[tmpMapItem.BucketNum];
+        ref MapItem tmpMapItem = ref mapItems[itemIdx];
+        ref Bucket bucket = ref buckets[tmpMapItem.BucketNum];
 
         uint ptr = bucket.ItemsList;
-        Item tmpItem = items[ptr];
+        ref Item tmpItem = ref items[ptr];
 
         for (uint i = 0; i < bucket.Size; i++)
         {
@@ -506,7 +495,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
                 return false;
 
             ptr++;
-            tmpItem = items[ptr];
+            tmpItem = ref items[ptr];
         }
 
         tmpItem.F = tmpMapItem.F;
@@ -515,7 +504,8 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         return true;
     }
 
-    private sealed class Bucket
+    [StructLayout(LayoutKind.Auto)]
+    private struct Bucket
     {
         public uint ItemsList; // offset
         public uint Size;
@@ -527,19 +517,22 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         }
     }
 
-    private sealed class SortedList
+    [StructLayout(LayoutKind.Auto)]
+    private struct SortedList
     {
         public uint BucketList;
         public uint Size;
     }
 
-    private sealed class Item
+    [StructLayout(LayoutKind.Auto)]
+    private struct Item
     {
         public uint F;
         public uint H;
     }
 
-    private sealed class MapItem
+    [StructLayout(LayoutKind.Auto)]
+    private struct MapItem
     {
         public uint BucketNum;
         public uint F;

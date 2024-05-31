@@ -145,20 +145,21 @@ Benchmarks are sorted from fastest to slowest.
 ```
 | Method    | name  | Mean              | Allocated |
 |---------- |------ |------------------:|----------:|
-| Query     | Dict  |          8.807 ns |         - |
-| Query     | BDZ   |         20.659 ns |         - |
-| Query     | BMZ_M |         21.738 ns |         - |
-| Query     | CHM_M |         22.436 ns |         - |
-| Query     | FCH_M |         23.851 ns |         - |
-| Query     | BDZ_M |         29.129 ns |         - |
-| Query     | CHD   |         30.247 ns |      40 B |
-| Query     | CHD_M |         63.735 ns |      40 B |
-| Construct | Dict  |      8,749.216 ns |   31016 B |
-| Construct | CHD   |     71,271.997 ns |  163385 B |
-| Construct | CHD_M |     95,512.809 ns |  172069 B |
-| Construct | BDZ_M |    159,941.805 ns |   80591 B |
-| Construct | BDZ   |    172,580.868 ns |  253063 B |
-| Construct | BDZ_M |    173,580.322 ns |  246738 B |
-| Construct | CHM_M |    251,787.630 ns |   83839 B |
-| Construct | FCH_M | 28,029,897.917 ns | 1208516 B |
+| Query     | Dict  |          8.708 ns |         - |
+| Query     | BMZ_M |         18.199 ns |         - |
+| Query     | BDZ   |         19.355 ns |         - |
+| Query     | CHM_M |         19.770 ns |         - |
+| Query     | FCH_M |         19.973 ns |         - |
+| Query     | CHD   |         30.335 ns |         - |
+| Query     | BDZ_M |         31.963 ns |         - |
+| Query     | CHD_M |         44.504 ns |         - |
+| Construct | Dict  |      8,638.064 ns |   31016 B |
+| Construct | CHD   |     49,194.324 ns |   39156 B |
+| Construct | CHD_M |     67,581.087 ns |   47831 B |
+| Construct | BDZ_M |    159,898.128 ns |   80575 B |
+| Construct | BDZ   |    164,998.722 ns |  250414 B |
+| Construct | BDZ_M |    165,906.307 ns |  250334 B |
+| Construct | CHM_M |    243,532.397 ns |   83903 B |
+| Construct | FCH_M | 21,347,443.750 ns | 1321044 B |
+
 ```

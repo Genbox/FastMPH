@@ -1,11 +1,11 @@
 # FastMPH
 
 [![NuGet](https://img.shields.io/nuget/v/Genbox.FastMPH.svg?style=flat-square&label=nuget)](https://www.nuget.org/packages/Genbox.FastMPH/)
-[![License](https://img.shields.io/github/license/Genbox/FastMPH)](https://github.com/Genbox/FastMPH/blob/master/LICENSE.txt)
+[![License](https://img.shields.io/github/license/Genbox/FastMPH)](https://github.com/Genbox/FastMPH/blob/main/LICENSE.txt)
 
 ### Description
 
-A C# port of the minimal perfect hash function library [CMPH](https://cmph.sourceforge.net/).
+A minimal perfect hash function library based on [CMPH](https://cmph.sourceforge.net/).
 
 ### Features
 

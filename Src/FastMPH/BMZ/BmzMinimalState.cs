@@ -1,6 +1,7 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.BMZ;
@@ -11,17 +12,17 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
 {
     private readonly HashCode<TKey> _hashCode;
 
-    internal BmzMinimalState(uint vertices, uint seed0, uint seed1, uint[] lookupTable, HashCode<TKey> func)
+    internal BmzMinimalState(uint numVertices, uint seed0, uint seed1, uint[] lookupTable, HashCode<TKey> func)
     {
         _hashCode = func;
-        Vertices = vertices;
+        NumVertices = numVertices;
         Seed0 = seed0;
         Seed1 = seed1;
         LookupTable = lookupTable;
     }
 
     /// <summary>Contains the number of vertices in the graph</summary>
-    public uint Vertices { get; }
+    public uint NumVertices { get; }
 
     /// <summary>The seed used in the first hash function</summary>
     public uint Seed0 { get; }
@@ -35,10 +36,10 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint h1 = _hashCode(key, Seed0) % Vertices;
-        uint h2 = _hashCode(key, Seed1) % Vertices;
+        uint h1 = _hashCode(key, Seed0) % NumVertices;
+        uint h2 = _hashCode(key, Seed1) % NumVertices;
 
-        if (h1 == h2 && ++h2 >= Vertices)
+        if (h1 == h2 && ++h2 >= NumVertices)
             h2 = 0;
 
         return LookupTable[h1] + LookupTable[h2];
@@ -55,7 +56,7 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     public void Pack(Span<byte> buffer)
     {
         SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(Vertices);
+        sw.WriteUInt32(NumVertices);
         sw.WriteUInt32(Seed0);
         sw.WriteUInt32(Seed1);
         sw.WriteUInt32((uint)LookupTable.Length);

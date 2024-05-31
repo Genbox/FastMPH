@@ -1,5 +1,6 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.BDZ;
@@ -10,16 +11,16 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
 {
     private readonly HashCode3<TKey> _hashCode;
 
-    internal BdzState(uint partitions, byte[] lookupTable, uint seed, HashCode3<TKey> hashCode)
+    internal BdzState(uint numPartitions, byte[] lookupTable, uint seed, HashCode3<TKey> hashCode)
     {
         _hashCode = hashCode;
-        Partitions = partitions;
+        NumPartitions = numPartitions;
         LookupTable = lookupTable;
         Seed = seed;
     }
 
     /// <summary>The number of partitions</summary>
-    public uint Partitions { get; }
+    public uint NumPartitions { get; }
 
     /// <summary>The lookup table</summary>
     public byte[] LookupTable { get; }
@@ -33,9 +34,9 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
         Span<uint> hashes = stackalloc uint[3];
 
         _hashCode(key, Seed, hashes);
-        hashes[0] = hashes[0] % Partitions;
-        hashes[1] = (hashes[1] % Partitions) + Partitions;
-        hashes[2] = (hashes[2] % Partitions) + (Partitions << 1); // n + n * 2
+        hashes[0] = hashes[0] % NumPartitions;
+        hashes[1] = (hashes[1] % NumPartitions) + NumPartitions;
+        hashes[2] = (hashes[2] % NumPartitions) + (NumPartitions << 1); // n + n * 2
 
         byte byte0 = LookupTable[hashes[0] / 5];
         byte byte1 = LookupTable[hashes[1] / 5];
@@ -54,7 +55,7 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
     {
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(Seed);
-        sw.WriteUInt32(Partitions);
+        sw.WriteUInt32(NumPartitions);
         sw.WriteUInt32((uint)LookupTable.Length);
 
         foreach (byte b in LookupTable)

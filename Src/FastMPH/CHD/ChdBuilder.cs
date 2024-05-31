@@ -5,6 +5,7 @@ using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.CHD.Internal;
 using Genbox.FastMPH.Internals;
 using Genbox.FastMPH.Internals.Compat;
+using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 using static Genbox.FastMPH.CHD.Internal.BitBool;
 
@@ -129,7 +130,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             return false;
         }
 
-        uint numBins = phState.Bins;
+        uint numBins = phState.NumBins;
         uint numKeys = phState.NumKeys;
         uint numValues = numBins - numKeys;
 

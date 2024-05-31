@@ -2,6 +2,7 @@ using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.CHD.Internal;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.CHD;
@@ -15,11 +16,11 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     internal readonly uint NumKeys;
     internal readonly byte[] OccupTable;
 
-    internal ChdState(CompressedSequence cs, uint buckets, uint bins, uint numKeys, uint seed, byte[] occupTable, HashCode3<TKey> hashCode)
+    internal ChdState(CompressedSequence cs, uint numBuckets, uint numBins, uint numKeys, uint seed, byte[] occupTable, HashCode3<TKey> hashCode)
     {
         _cs = cs;
-        Buckets = buckets;
-        Bins = bins;
+        NumBuckets = numBuckets;
+        NumBins = numBins;
         NumKeys = numKeys;
         Seed = seed;
         OccupTable = occupTable;
@@ -30,25 +31,25 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     public uint Seed { get; }
 
     /// <summary>The number of buckets</summary>
-    public uint Buckets { get; }
+    public uint NumBuckets { get; }
 
     /// <summary>The number of bins</summary>
-    public uint Bins { get; }
+    public uint NumBins { get; }
 
     /// <inheritdoc />
     public uint Search(TKey key)
     {
         Span<uint> hashes = stackalloc uint[3];
         _hashCode(key, Seed, hashes);
-        uint g = hashes[0] % Buckets;
-        uint f = hashes[1] % Bins;
-        uint h = (hashes[2] % (Bins - 1)) + 1;
+        uint g = hashes[0] % NumBuckets;
+        uint f = hashes[1] % NumBins;
+        uint h = (hashes[2] % (NumBins - 1)) + 1;
 
         uint disp = _cs.Query(g);
 
-        uint probe0Num = disp % Bins;
-        uint probe1Num = disp / Bins;
-        uint position = (uint)((f + ((ulong)h * probe0Num) + probe1Num) % Bins);
+        uint probe0Num = disp % NumBins;
+        uint probe1Num = disp / NumBins;
+        uint position = (uint)((f + ((ulong)h * probe0Num) + probe1Num) % NumBins);
         return position;
     }
 
@@ -72,8 +73,8 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     {
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(Seed);
-        sw.WriteUInt32(Buckets);
-        sw.WriteUInt32(Bins);
+        sw.WriteUInt32(NumBuckets);
+        sw.WriteUInt32(NumBins);
         sw.WriteUInt32(NumKeys);
         sw.WriteUInt32((uint)OccupTable.Length);
 

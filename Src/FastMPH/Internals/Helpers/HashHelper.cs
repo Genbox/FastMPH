@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
-using Genbox.FastMPH.BDZ;
 
-namespace Genbox.FastMPH.Internals;
+namespace Genbox.FastMPH.Internals.Helpers;
 
 internal static class HashHelper
 {

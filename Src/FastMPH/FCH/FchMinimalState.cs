@@ -1,6 +1,7 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.FCH;
@@ -11,10 +12,10 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
 {
     private readonly HashCode<TKey> _hashCode;
 
-    internal FchMinimalState(uint items, uint b, double p1, double p2, uint seed0, uint seed1, uint[] lookupTable, HashCode<TKey> hashCode)
+    internal FchMinimalState(uint numItems, uint b, double p1, double p2, uint seed0, uint seed1, uint[] lookupTable, HashCode<TKey> hashCode)
     {
         _hashCode = hashCode;
-        Items = items;
+        NumItems = numItems;
         B = b;
         P1 = p1;
         P2 = p2;
@@ -26,7 +27,7 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <summary>
     /// The number of items in the hash function
     /// </summary>
-    public uint Items { get; }
+    public uint NumItems { get; }
 
     public uint B { get; }
     public double P1 { get; }
@@ -44,11 +45,11 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint h1 = _hashCode(key, Seed0) % Items;
-        uint h2 = _hashCode(key, Seed1) % Items;
+        uint h1 = _hashCode(key, Seed0) % NumItems;
+        uint h2 = _hashCode(key, Seed1) % NumItems;
 
         h1 = FchBuilder<TKey>.Mixh10h11h12(B, P1, P2, h1);
-        return (h2 + LookupTable[h1]) % Items;
+        return (h2 + LookupTable[h1]) % NumItems;
     }
 
     /// <inheritdoc />
@@ -58,14 +59,14 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
                                    sizeof(double) + //P2
                                    sizeof(uint) + //Seed1
                                    sizeof(uint) + //Seed2
-                                   sizeof(uint) + // LookupTable length
+                                   sizeof(uint) + //LookupTable length
                                    (sizeof(uint) * (uint)LookupTable.Length); //LookupTable
 
     /// <inheritdoc />
     public void Pack(Span<byte> buffer)
     {
         SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(Items);
+        sw.WriteUInt32(NumItems);
         sw.WriteUInt32(B);
         sw.WriteDouble(P1);
         sw.WriteDouble(P2);

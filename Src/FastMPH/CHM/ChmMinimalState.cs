@@ -1,6 +1,7 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.CHM;
@@ -11,21 +12,21 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
 {
     private readonly HashCode<TKey> _hashCode;
 
-    internal ChmMinimalState(uint vertices, uint edges, uint[] lookupTable, uint seed0, uint seed1, HashCode<TKey> hashCode)
+    internal ChmMinimalState(uint numVertices, uint numEdges, uint[] lookupTable, uint seed0, uint seed1, HashCode<TKey> hashCode)
     {
         _hashCode = hashCode;
-        Vertices = vertices;
-        Edges = edges;
+        NumVertices = numVertices;
+        NumEdges = numEdges;
         LookupTable = lookupTable;
         Seed0 = seed0;
         Seed1 = seed1;
     }
 
     /// <summary>The number of vertices in the graph</summary>
-    public uint Vertices { get; }
+    public uint NumVertices { get; }
 
     /// <summary>The number of edges in the graph</summary>
-    public uint Edges { get; }
+    public uint NumEdges { get; }
 
     /// <summary>The seed used in the first hash function</summary>
     public uint Seed0 { get; }
@@ -39,13 +40,13 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint h1 = _hashCode(key, Seed0) % Vertices;
-        uint h2 = _hashCode(key, Seed1) % Vertices;
+        uint h1 = _hashCode(key, Seed0) % NumVertices;
+        uint h2 = _hashCode(key, Seed1) % NumVertices;
 
-        if (h1 == h2 && ++h2 >= Vertices)
+        if (h1 == h2 && ++h2 >= NumVertices)
             h2 = 0;
 
-        return (LookupTable[h1] + LookupTable[h2]) % Edges;
+        return (LookupTable[h1] + LookupTable[h2]) % NumEdges;
     }
 
     /// <inheritdoc />
@@ -60,8 +61,8 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     public void Pack(Span<byte> buffer)
     {
         SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(Vertices);
-        sw.WriteUInt32(Edges);
+        sw.WriteUInt32(NumVertices);
+        sw.WriteUInt32(NumEdges);
         sw.WriteUInt32(Seed0);
         sw.WriteUInt32(Seed1);
         sw.WriteUInt32((uint)LookupTable.Length);

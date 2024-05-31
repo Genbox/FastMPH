@@ -1,4 +1,4 @@
-﻿namespace Genbox.FastMPH.Internals;
+﻿namespace Genbox.FastMPH.Internals.Helpers;
 
 public static class RandomHelper
 {

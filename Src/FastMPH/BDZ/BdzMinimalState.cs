@@ -1,5 +1,6 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 using static Genbox.FastMPH.Internals.BitArray;
 
@@ -11,10 +12,10 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
 {
     private readonly HashCode3<TKey> _hashCode;
 
-    internal BdzMinimalState(uint partitions, byte[] lookupTable, uint seed, byte bitsOfKey, uint[] rankTable, HashCode3<TKey> hashCode)
+    internal BdzMinimalState(uint numPartitions, byte[] lookupTable, uint seed, byte bitsOfKey, uint[] rankTable, HashCode3<TKey> hashCode)
     {
         _hashCode = hashCode;
-        Partitions = partitions;
+        NumPartitions = numPartitions;
         LookupTable = lookupTable;
         Seed = seed;
         BitsOfKey = bitsOfKey;
@@ -22,7 +23,7 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     }
 
     /// <summary>The number of partitions</summary>
-    public uint Partitions { get; }
+    public uint NumPartitions { get; }
 
     /// <summary>The lookup table</summary>
     public byte[] LookupTable { get; }
@@ -42,9 +43,9 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         Span<uint> hashes = stackalloc uint[3];
         _hashCode(key, Seed, hashes);
 
-        hashes[0] = hashes[0] % Partitions;
-        hashes[1] = (hashes[1] % Partitions) + Partitions;
-        hashes[2] = (hashes[2] % Partitions) + (Partitions << 1); // n + n * 2
+        hashes[0] = hashes[0] % NumPartitions;
+        hashes[1] = (hashes[1] % NumPartitions) + NumPartitions;
+        hashes[2] = (hashes[2] % NumPartitions) + (NumPartitions << 1); // n + n * 2
 
         uint vertex = hashes[(GetValue(LookupTable, hashes[0]) + GetValue(LookupTable, hashes[1]) + GetValue(LookupTable, hashes[2])) % 3];
         return Rank(BitsOfKey, RankTable, LookupTable, vertex);
@@ -55,7 +56,7 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     {
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(Seed);
-        sw.WriteUInt32(Partitions);
+        sw.WriteUInt32(NumPartitions);
 
         sw.WriteUInt32((uint)RankTable.Length);
 

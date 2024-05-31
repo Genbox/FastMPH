@@ -17,7 +17,7 @@ internal static class Program
             "cow"
         ];
 
-        if (!builder.TryCreate(data, out ChdState<string>? state))
+        if (!builder.TryCreateMinimal(data, out ChdMinimalState<string>? state))
         {
             Console.WriteLine("Unable to create perfect hash function");
             return;
@@ -25,5 +25,7 @@ internal static class Program
 
         foreach (string item in data)
             Console.WriteLine($"Hashcode for {item}: {state.Search(item)}");
+
+        Console.WriteLine($"It packs to a function that uses {state.GetPackedSize() / (float)data.Length} bytes pr. element");
     }
 }

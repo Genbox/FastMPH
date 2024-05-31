@@ -6,7 +6,7 @@ namespace Genbox.FastMPH.CHD;
 
 /// <summary>Contains the state of a CHD minimal perfect hash function</summary>
 [PublicAPI]
-public sealed class ChdMinimalState<TKey> : IHashState<TKey>
+public sealed class ChdMinimalState<TKey> : IHashState<TKey> where TKey : notnull
 {
     private readonly ChdState<TKey> _state;
     private readonly CompressedRank _rank;

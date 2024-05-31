@@ -1,4 +1,5 @@
 using Genbox.FastMPH.Abstracts;
+using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.CHD.Internal;
 using Genbox.FastMPH.Internals;
 using JetBrains.Annotations;
@@ -10,11 +11,11 @@ namespace Genbox.FastMPH.CHD;
 public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
 {
     private readonly CompressedSequence _cs;
-    private readonly Func<TKey, uint, uint[]> _hashCode;
+    private readonly HashCode3<TKey> _hashCode;
     internal readonly byte[] OccupTable;
     internal readonly uint NumKeys;
 
-    internal ChdState(CompressedSequence cs, uint buckets, uint bins, uint numKeys, uint seed, byte[] occupTable, Func<TKey, uint, uint[]> hashCode)
+    internal ChdState(CompressedSequence cs, uint buckets, uint bins, uint numKeys, uint seed, byte[] occupTable, HashCode3<TKey> hashCode)
     {
         _cs = cs;
         Buckets = buckets;
@@ -37,7 +38,8 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint[] hashes = _hashCode(key, Seed);
+        Span<uint> hashes = stackalloc uint[3];
+        _hashCode(key, Seed, hashes);
         uint g = hashes[0] % Buckets;
         uint f = hashes[1] % Bins;
         uint h = hashes[2] % (Bins - 1) + 1;
@@ -59,9 +61,8 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
                     sizeof(uint) + //NumKeys
                     sizeof(uint) + //OccupTable length
                     sizeof(byte) * (uint)OccupTable.Length + //OccupTable
-                    sizeof(uint); //OccupTable length
-
-        //TODO: sizeof(byte) * (uint)_cs; //LookupTable
+                    sizeof(uint) + //OccupTable length
+                    _cs.GetPackedSize();
 
         return size;
     }
@@ -79,15 +80,18 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
         foreach (byte b in OccupTable)
             sw.WriteByte(b);
 
-        //TODO: compressed seq
+        _cs.Pack(sw);
     }
 
     /// <summary>
     /// Deserialize a serialized perfect hash function into a new instance of <see cref="ChdState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    public static ChdState<TKey> Unpack(ReadOnlySpan<byte> packed)
+    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
+    public static ChdState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
     {
+        comparer ??= EqualityComparer<TKey>.Default;
+
         SpanReader sr = new SpanReader(packed);
         uint seed = sr.ReadUInt32();
         uint numBuckets = sr.ReadUInt32();
@@ -100,8 +104,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
         for (int i = 0; i < length; i++)
             occupTable[i] = sr.ReadByte();
 
-        //TODO: compressed seq
-
-        return new ChdState<TKey>(null!, numBuckets, numBins, numKeys, seed, occupTable, null!);
+        CompressedSequence cs = CompressedSequence.Unpack(sr);
+        return new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, HashHelper.GetHashFunc3(comparer));
     }
 }

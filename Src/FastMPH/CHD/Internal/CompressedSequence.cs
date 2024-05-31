@@ -1,10 +1,9 @@
-using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
 using static Genbox.FastMPH.CHD.Internal.BitBool;
 
 namespace Genbox.FastMPH.CHD.Internal;
 
-internal sealed class CompressedSequence : IPackable
+internal sealed class CompressedSequence
 {
     private uint _remR;
     private uint _totalLength; // total length in bits of stored_table
@@ -12,7 +11,19 @@ internal sealed class CompressedSequence : IPackable
     private uint[] _lengthRems;
     private uint[] _storeTable;
 
-    public CompressedSequence() => _sel = new Select();
+    public CompressedSequence()
+    {
+        _sel = new Select();
+    }
+
+    private CompressedSequence(uint remR, uint totalLength, uint[] lengthRems, uint[] storeTable, Select sel)
+    {
+        _remR = remR;
+        _totalLength = totalLength;
+        _lengthRems = lengthRems;
+        _storeTable = storeTable;
+        _sel = sel;
+    }
 
     public void Generate(uint[] valsTable, uint n)
     {
@@ -112,23 +123,43 @@ internal sealed class CompressedSequence : IPackable
                _sel.GetPackedSize(); //_sel
     }
 
-    public void Pack(Span<byte> buffer)
+    public void Pack(SpanWriter writer)
     {
-        SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(_remR);
-        sw.WriteUInt32(_totalLength);
-        sw.WriteUInt32((uint)_lengthRems.Length);
+        writer.WriteUInt32(_remR);
+        writer.WriteUInt32(_totalLength);
+        writer.WriteUInt32((uint)_lengthRems.Length);
 
         foreach (uint u in _lengthRems)
-            sw.WriteUInt32(u);
+            writer.WriteUInt32(u);
 
-        sw.WriteUInt32((uint)_storeTable.Length);
+        writer.WriteUInt32((uint)_storeTable.Length);
 
         foreach (uint u in _storeTable)
-            sw.WriteUInt32(u);
+            writer.WriteUInt32(u);
 
-        //Genbox: We need to slice the span to avoid _sel.Pack() from overwriting data
-        uint remaining = GetPackedSize() - _sel.GetPackedSize();
-        _sel.Pack(buffer[(int)remaining..]);
+        _sel.Pack(writer);
+    }
+
+    public static CompressedSequence Unpack(SpanReader sr)
+    {
+        uint remR = sr.ReadUInt32();
+        uint totalLength = sr.ReadUInt32();
+        uint lengthRemsLen = sr.ReadUInt32();
+
+        uint[] lengthRems = new uint[lengthRemsLen];
+
+        for (int i = 0; i < lengthRemsLen; i++)
+            lengthRems[i] = sr.ReadUInt32();
+
+        uint storeTableLen = sr.ReadUInt32();
+
+        uint[] storeTable = new uint[storeTableLen];
+
+        for (int i = 0; i < storeTableLen; i++)
+            storeTable[i] = sr.ReadUInt32();
+
+        Select sel = Select.Unpack(sr);
+
+        return new CompressedSequence(remR, totalLength, lengthRems, storeTable, sel);
     }
 }

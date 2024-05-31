@@ -4,15 +4,13 @@ using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.BDZ;
 
-public delegate void HashCode<in TKey>(TKey arg1, uint seed, Span<uint> hashes);
-
 /// <summary>Contains the state of a BDZ perfect hash function</summary>
 [PublicAPI]
 public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
 {
-    private readonly HashCode<TKey> _hashCode;
+    private readonly HashCode3<TKey> _hashCode;
 
-    internal BdzState(uint partitions, byte[] lookupTable, uint seed, HashCode<TKey> hashCode)
+    internal BdzState(uint partitions, byte[] lookupTable, uint seed, HashCode3<TKey> hashCode)
     {
         _hashCode = hashCode;
         Partitions = partitions;
@@ -89,8 +87,11 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
     /// Deserialize a serialized perfect hash function into a new instance of <see cref="BdzState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    public static BdzState<TKey> Unpack(ReadOnlySpan<byte> packed)
+    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
+    public static BdzState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
     {
+        comparer ??= EqualityComparer<TKey>.Default;
+
         SpanReader sr = new SpanReader(packed);
 
         uint seed = sr.ReadUInt32();
@@ -102,6 +103,6 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
         for (int i = 0; i < lookupTableLength; i++)
             lookupTable[i] = sr.ReadByte();
 
-        return new BdzState<TKey>(numPartitions, lookupTable, seed, null!);
+        return new BdzState<TKey>(numPartitions, lookupTable, seed, HashHelper.GetHashFunc3(comparer));
     }
 }

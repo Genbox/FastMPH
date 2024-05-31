@@ -1,4 +1,5 @@
 using Genbox.FastMPH.Abstracts;
+using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Internals;
 using JetBrains.Annotations;
 
@@ -8,11 +9,11 @@ namespace Genbox.FastMPH.BMZ;
 [PublicAPI]
 public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnull
 {
-    private readonly Func<TKey, uint, uint> _func;
+    private readonly HashCode<TKey> _hashCode;
 
-    internal BmzMinimalState(uint vertices, uint seed0, uint seed1, uint[] lookupTable, Func<TKey, uint, uint> func)
+    internal BmzMinimalState(uint vertices, uint seed0, uint seed1, uint[] lookupTable, HashCode<TKey> func)
     {
-        _func = func;
+        _hashCode = func;
         Vertices = vertices;
         Seed0 = seed0;
         Seed1 = seed1;
@@ -34,8 +35,8 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint h1 = _func(key, Seed0) % Vertices;
-        uint h2 = _func(key, Seed1) % Vertices;
+        uint h1 = _hashCode(key, Seed0) % Vertices;
+        uint h2 = _hashCode(key, Seed1) % Vertices;
 
         if (h1 == h2 && ++h2 >= Vertices)
             h2 = 0;
@@ -70,8 +71,11 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BmzMinimalState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    public static BmzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed)
+    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
+    public static BmzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
     {
+        comparer ??= EqualityComparer<TKey>.Default;
+
         SpanReader sw = new SpanReader(packed);
         uint numVertices = sw.ReadUInt32();
         uint seed0 = sw.ReadUInt32();
@@ -83,6 +87,6 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         for (int i = 0; i < length; i++)
             lookupTable[i] = sw.ReadUInt32();
 
-        return new BmzMinimalState<TKey>(numVertices, seed0, seed1, lookupTable, null!);
+        return new BmzMinimalState<TKey>(numVertices, seed0, seed1, lookupTable, HashHelper.GetHashFunc(comparer));
     }
 }

@@ -24,7 +24,9 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
     public bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out BdzState<TKey>? state, BdzSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new BdzSettings();
-        HashCode<TKey> hashCode = HashHelper.GetHashCodeFunc3(comparer);
+        comparer ??= EqualityComparer<TKey>.Default;
+
+        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(comparer);
 
         LogCreating(keys.Length, settings.LoadFactor);
 
@@ -46,7 +48,9 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
     public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new BdzMinimalSettings();
-        HashCode<TKey> hashCode = HashHelper.GetHashCodeFunc3(comparer);
+        comparer ??= EqualityComparer<TKey>.Default;
+
+        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(comparer);
 
         LogCreatingMinimal(keys.Length, settings.LoadFactor, settings.NumBitsOfKey);
 
@@ -66,7 +70,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         return true;
     }
 
-    private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, bool minimal, double loadFactor, uint iterations, out uint numPartitions, out uint numVertices, out uint seed, [NotNullWhen(true)]out byte[]? lookupTable)
+    private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, bool minimal, double loadFactor, uint iterations, out uint numPartitions, out uint numVertices, out uint seed, [NotNullWhen(true)]out byte[]? lookupTable)
     {
         uint numEdges = (uint)keys.Length;
         numPartitions = (uint)Math.Ceiling(loadFactor * numEdges / 3);
@@ -198,7 +202,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         return (int)(queueHead - numEdges); /* returns 0 if successful otherwise return negative number*/
     }
 
-    private bool MappingStep(ReadOnlySpan<TKey> keys, uint seed, uint numPartitions, uint numEdges, Graph graph, uint[] queue, HashCode<TKey> hashCode)
+    private bool MappingStep(ReadOnlySpan<TKey> keys, uint seed, uint numPartitions, uint numEdges, Graph graph, uint[] queue, HashCode3<TKey> hashCode)
     {
         LogMappingStep(keys.Length, seed, numPartitions, numEdges);
 

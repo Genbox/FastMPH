@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Genbox.FastMPH.Abstracts;
+using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.CHD.Internal;
 using Genbox.FastMPH.Internals;
 using Genbox.FastMPH.Internals.Compat;
@@ -25,7 +26,9 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
     public bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out ChdState<TKey>? state, ChdSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new ChdSettings();
-        Func<TKey, uint, uint[]> hashCode = HashHelper.GetHashCodeFunc2(comparer);
+        comparer ??= EqualityComparer<TKey>.Default;
+
+        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(comparer);
 
         uint numKeys = (uint)keys.Length;
         uint numBuckets = numKeys / settings.KeysPerBucket + 1;
@@ -145,7 +148,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         return true;
     }
 
-    private bool Mapping<T>(uint numKeys, uint numBins, uint numBuckets, ReadOnlySpan<T> keys, Func<T, uint, uint[]> hashCode, Bucket[] buckets, Item[] items, out uint maxBucketSize, out uint seed)
+    private bool Mapping<T>(uint numKeys, uint numBins, uint numBuckets, ReadOnlySpan<T> keys, HashCode3<T> hashCode, Bucket[] buckets, Item[] items, out uint maxBucketSize, out uint seed)
     {
         maxBucketSize = 0;
 
@@ -165,12 +168,14 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
             BucketsClean(buckets, numBuckets);
 
+            uint[] hashes = new uint[3];
+
             uint i;
             for (i = 0; i < numKeys; i++)
             {
                 T key = keys[(int)i];
 
-                uint[] hashes = hashCode(key, seed);
+                hashCode(key, seed, hashes);
                 uint g = hashes[0] % numBuckets;
 
                 MapItem mapItem = mapItems[i];

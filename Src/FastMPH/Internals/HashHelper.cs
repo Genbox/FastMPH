@@ -34,64 +34,18 @@ internal static class HashHelper
         }
     }
 
-    public static Func<T, uint, uint> GetHashCodeFunc<T>(IEqualityComparer<T>? comparer) where T : notnull
+    public static HashCode<T> GetHashFunc<T>(IEqualityComparer<T> comparer) where T : notnull
     {
-        if (comparer != null)
-            return (a, b) => Combine(comparer.GetHashCode(a), b);
-
-        return static (a, b) => Combine(EqualityComparer<T>.Default.GetHashCode(a), b);
+        return (a, b) => Combine(comparer.GetHashCode(a), b);
     }
 
-    public static Func<T, uint, uint[]> GetHashCodeFunc2<T>(IEqualityComparer<T>? comparer) where T : notnull
+    public static HashCode3<T> GetHashFunc3<T>(IEqualityComparer<T> comparer) where T : notnull
     {
-        if (comparer != null)
-        {
-            return (a, b) =>
-            {
-                unchecked
-                {
-                    uint val1 = Combine((uint)comparer.GetHashCode(a), b);
-                    uint val2 = Murmur_32(val1);
-                    uint val3 = Murmur_32(val2);
-
-                    return [val1, val2, val3];
-                }
-            };
-        }
-
-        return static (a, b) =>
+        return (a, b, hashes) =>
         {
             unchecked
             {
-                uint val1 = Combine(EqualityComparer<T>.Default.GetHashCode(a), b);
-                uint val2 = Murmur_32(val1);
-                uint val3 = Murmur_32(val2);
-
-                return [val1, val2, val3];
-            }
-        };
-    }
-
-    public static HashCode<T> GetHashCodeFunc3<T>(IEqualityComparer<T>? comparer) where T : notnull
-    {
-        if (comparer != null)
-        {
-            return (a, b, hashes) =>
-            {
-                unchecked
-                {
-                    hashes[0] = Combine((uint)comparer.GetHashCode(a), b);
-                    hashes[1] = Murmur_32(hashes[0]);
-                    hashes[2] = Murmur_32(hashes[1]);
-                }
-            };
-        }
-
-        return static (a, b, hashes) =>
-        {
-            unchecked
-            {
-                hashes[0] = Combine(EqualityComparer<T>.Default.GetHashCode(a), b);
+                hashes[0] = Combine(comparer.GetHashCode(a), b);
                 hashes[1] = Murmur_32(hashes[0]);
                 hashes[2] = Murmur_32(hashes[1]);
             }

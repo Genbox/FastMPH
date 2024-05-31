@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
+using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Internals;
 using JetBrains.Annotations;
 using static Genbox.FastMPH.Internals.BitArray;
@@ -16,13 +17,15 @@ namespace Genbox.FastMPH.CHM;
 /// </list>
 /// </summary>
 [PublicAPI]
-public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMinimalState<TKey>, ChmMinimalSettings>
+public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMinimalState<TKey>, ChmMinimalSettings> where TKey : notnull
 {
     /// <inheritdoc />
     public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new ChmMinimalSettings();
-        Func<TKey, uint, uint> hashCode = HashHelper.GetHashCodeFunc(comparer);
+        comparer ??= EqualityComparer<TKey>.Default;
+
+        HashCode<TKey> hashCode = HashHelper.GetHashFunc(comparer);
 
         LogCreating(keys.Length, settings.LoadFactor);
 
@@ -105,7 +108,7 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
         }
     }
 
-    private bool GenerateEdges<T>(Graph graph, uint seed0, uint seed1, uint numVertices, ReadOnlySpan<T> keys, Func<T, uint, uint> hashCode) where T : notnull
+    private bool GenerateEdges<T>(Graph graph, uint seed0, uint seed1, uint numVertices, ReadOnlySpan<T> keys, HashCode<T> hashCode) where T : notnull
     {
         graph.ClearEdges();
 

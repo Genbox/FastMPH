@@ -109,8 +109,7 @@ internal sealed class CompressedRank : IPackable
         foreach (uint u in _valsRems)
             sw.WriteUInt32(u);
 
-        buffer = buffer[sw.BytesWritten()..];
-        _sel.Pack(buffer);
+        _sel.Pack(sw);
     }
 
     public static CompressedRank Unpack(ReadOnlySpan<byte> data)
@@ -126,9 +125,7 @@ internal sealed class CompressedRank : IPackable
         for (int i = 0; i < valsRems.Length; i++)
             valsRems[i] = sr.ReadUInt32();
 
-        data = data[sr.BytesRead()..];
-        Select sel = Select.Unpack(data);
-
+        Select sel = Select.Unpack(sr);
         return new CompressedRank(maxVal, remR, valsRemsCount, valsRems, sel);
     }
 }

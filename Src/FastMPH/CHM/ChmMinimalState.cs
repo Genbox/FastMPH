@@ -1,4 +1,5 @@
 using Genbox.FastMPH.Abstracts;
+using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Internals;
 using JetBrains.Annotations;
 
@@ -8,9 +9,9 @@ namespace Genbox.FastMPH.CHM;
 [PublicAPI]
 public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnull
 {
-    private readonly Func<TKey, uint, uint> _hashCode;
+    private readonly HashCode<TKey> _hashCode;
 
-    internal ChmMinimalState(uint vertices, uint edges, uint[] lookupTable, uint seed0, uint seed1, Func<TKey, uint, uint> hashCode)
+    internal ChmMinimalState(uint vertices, uint edges, uint[] lookupTable, uint seed0, uint seed1, HashCode<TKey> hashCode)
     {
         _hashCode = hashCode;
         Vertices = vertices;
@@ -76,8 +77,11 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="ChmMinimalState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    public static ChmMinimalState<TKey> Unpack(Span<byte> packed)
+    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
+    public static ChmMinimalState<TKey> Unpack(Span<byte> packed, IEqualityComparer<TKey>? comparer = null)
     {
+        comparer ??= EqualityComparer<TKey>.Default;
+
         SpanReader sw = new SpanReader(packed);
         uint numVertices = sw.ReadUInt32();
         uint numEdges = sw.ReadUInt32();
@@ -90,6 +94,6 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         for (int i = 0; i < length; i++)
             lookupTable[i] = sw.ReadUInt32();
 
-        return new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed0, seed1, null!);
+        return new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed0, seed1, HashHelper.GetHashFunc(comparer));
     }
 }

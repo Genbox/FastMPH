@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
+using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Internals;
 using Genbox.FastMPH.Internals.Compat;
 using JetBrains.Annotations;
@@ -26,7 +27,9 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
     public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out BmzMinimalState<TKey>? state, BmzMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new BmzMinimalSettings();
-        Func<TKey, uint, uint> hashCode = HashHelper.GetHashCodeFunc(comparer);
+        comparer ??= EqualityComparer<TKey>.Default;
+
+        HashCode<TKey> hashCode = HashHelper.GetHashFunc(comparer);
 
         LogCreating(keys.Length, settings.Vertices);
 
@@ -132,7 +135,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
         return true;
     }
 
-    private bool GenerateEdges<T>(Graph graph, uint numVertices, uint seed0, uint seed1, ReadOnlySpan<T> keys, Func<T, uint, uint> hashCode) where T : notnull
+    private bool GenerateEdges<T>(Graph graph, uint numVertices, uint seed0, uint seed1, ReadOnlySpan<T> keys, HashCode<T> hashCode) where T : notnull
     {
         LogGeneratingEdges(numVertices);
         graph.ClearEdges();

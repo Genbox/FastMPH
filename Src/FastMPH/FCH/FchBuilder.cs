@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
+using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Internals;
 using Genbox.FastMPH.Internals.Compat;
 using JetBrains.Annotations;
@@ -26,7 +27,9 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
     public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out FchMinimalState<TKey>? state, FchMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new FchMinimalSettings();
-        Func<TKey, uint, uint> hashCode = HashHelper.GetHashCodeFunc(comparer);
+        comparer ??= EqualityComparer<TKey>.Default;
+
+        HashCode<TKey> hashCode = HashHelper.GetHashFunc(comparer);
 
         uint numItems = (uint)keys.Length;
 
@@ -73,7 +76,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         return true;
     }
 
-    private Buckets<T> Mapping<T>(uint seed, uint b, double p1, double p2, uint m, ReadOnlySpan<T> keys, Func<T, uint, uint> hashCode)
+    private Buckets<T> Mapping<T>(uint seed, uint b, double p1, double p2, uint m, ReadOnlySpan<T> keys, HashCode<T> hashCode)
     {
         Buckets<T> buckets = new Buckets<T>(_logger, b);
 
@@ -91,7 +94,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
 
     private static uint[] Ordering<T>(Buckets<T> buckets) => buckets.GetIndexesSortedBySize();
 
-    private bool Searching<T>(Buckets<T> buckets, uint[] sortedIndexes, uint[] lookupTable, uint m, Func<T, uint, uint> hashCode, out uint seed) where T : notnull
+    private bool Searching<T>(Buckets<T> buckets, uint[] sortedIndexes, uint[] lookupTable, uint m, HashCode<T> hashCode, out uint seed) where T : notnull
     {
         uint[] randomTable = new uint[m];
         uint[] mapTable = new uint[m];
@@ -199,7 +202,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
     }
 
     /* Check whether function h2 causes collisions among the keys of each bucket */
-    private bool CheckForCollisionsH2<T>(uint m, uint seed, Buckets<T> buckets, uint[] sortedIndexes, Func<T, uint, uint> hashCode)
+    private bool CheckForCollisionsH2<T>(uint m, uint seed, Buckets<T> buckets, uint[] sortedIndexes, HashCode<T> hashCode)
     {
         byte[] hashtable = new byte[m];
         uint numBuckets = buckets.GetNumBuckets();

@@ -4,7 +4,7 @@ using Genbox.FastMPH.Internals;
 
 namespace Genbox.FastMPH.CHD.Internal;
 
-internal sealed class Select : IPackable
+internal sealed class Select
 {
     private const int NbitsStepSelectTable = 7;
     private const int StepSelectTable = 128;
@@ -312,9 +312,8 @@ internal sealed class Select : IPackable
                sizeof(uint) * (uint)BitsVec.Length; //BitsVec
     }
 
-    public void Pack(Span<byte> buffer)
+    public void Pack(SpanWriter sw)
     {
-        SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(_n);
         sw.WriteUInt32(_m);
         sw.WriteUInt32((uint)_selectTable.Length);
@@ -328,9 +327,8 @@ internal sealed class Select : IPackable
             sw.WriteUInt32(u);
     }
 
-    public static Select Unpack(ReadOnlySpan<byte> data)
+    public static Select Unpack(SpanReader sr)
     {
-        SpanReader sr = new SpanReader(data);
         uint n = sr.ReadUInt32();
         uint m = sr.ReadUInt32();
         uint selectTableLength = sr.ReadUInt32();

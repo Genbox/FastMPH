@@ -1,4 +1,5 @@
 using Genbox.FastMPH.Abstracts;
+using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Internals;
 using JetBrains.Annotations;
 
@@ -8,9 +9,9 @@ namespace Genbox.FastMPH.FCH;
 [PublicAPI]
 public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnull
 {
-    private readonly Func<TKey, uint, uint> _hashCode;
+    private readonly HashCode<TKey> _hashCode;
 
-    internal FchMinimalState(uint items, uint b, double p1, double p2, uint seed0, uint seed1, uint[] lookupTable, Func<TKey, uint, uint> hashCode)
+    internal FchMinimalState(uint items, uint b, double p1, double p2, uint seed0, uint seed1, uint[] lookupTable, HashCode<TKey> hashCode)
     {
         _hashCode = hashCode;
         Items = items;
@@ -83,8 +84,11 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="FchMinimalState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    public static FchMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed)
+    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
+    public static FchMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
     {
+        comparer ??= EqualityComparer<TKey>.Default;
+
         SpanReader sr = new SpanReader(packed);
         uint numItems = sr.ReadUInt32();
         uint b = sr.ReadUInt32();
@@ -99,6 +103,6 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         for (int i = 0; i < length; i++)
             lookupTable[i] = sr.ReadUInt32();
 
-        return new FchMinimalState<TKey>(numItems, b, p1, p2, seed0, seed1, lookupTable, null!);
+        return new FchMinimalState<TKey>(numItems, b, p1, p2, seed0, seed1, lookupTable, HashHelper.GetHashFunc(comparer));
     }
 }

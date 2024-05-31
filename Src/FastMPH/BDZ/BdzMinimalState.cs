@@ -9,9 +9,9 @@ namespace Genbox.FastMPH.BDZ;
 [PublicAPI]
 public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnull
 {
-    private readonly HashCode<TKey> _hashCode;
+    private readonly HashCode3<TKey> _hashCode;
 
-    internal BdzMinimalState(uint partitions, byte[] lookupTable, uint seed, byte bitsOfKey, uint[] rankTable, HashCode<TKey> hashCode)
+    internal BdzMinimalState(uint partitions, byte[] lookupTable, uint seed, byte bitsOfKey, uint[] rankTable, HashCode3<TKey> hashCode)
     {
         _hashCode = hashCode;
         Partitions = partitions;
@@ -85,11 +85,14 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     }
 
     /// <summary>
-    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BdzState"/>
+    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BdzState{TKey}"/>
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    public static BdzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed)
+    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
+    public static BdzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
     {
+        comparer ??= EqualityComparer<TKey>.Default;
+
         SpanReader sr = new SpanReader(packed);
 
         uint seed = sr.ReadUInt32();
@@ -109,7 +112,7 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         for (int i = 0; i < lookupTableLength; i++)
             lookupTable[i] = sr.ReadByte();
 
-        return new BdzMinimalState<TKey>(numPartitions, lookupTable, seed, numBitsOfKey, rankTable, null!);
+        return new BdzMinimalState<TKey>(numPartitions, lookupTable, seed, numBitsOfKey, rankTable, HashHelper.GetHashFunc3(comparer));
     }
 
     private static uint Rank(uint numBitsOfKey, uint[] rankTable, byte[] lookupTable, uint vertex)

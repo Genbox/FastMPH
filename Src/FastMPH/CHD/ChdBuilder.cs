@@ -164,7 +164,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         for (; mappingIterations > 0; mappingIterations--)
         {
             //Genbox: It used mod here to reduce keyspace of the seed. I don't see why that is needed.
-            seed = (uint)RandomProvider.Random.Next();
+            seed = RandomHelper.Next();
 
             BucketsClean(buckets, numBuckets);
 

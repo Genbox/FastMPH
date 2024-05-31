@@ -1,12 +1,12 @@
 ﻿namespace Genbox.FastMPH.Tests.Misc;
 
-public static class RandomHelper
+public static class StringHelper
 {
     private const string _alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     public static IEnumerable<string> GetRandomStrings(int length, int count)
     {
-        System.Random r = new System.Random(42);
+        Random r = new Random(42);
         char[] buffer = new char[length];
 
         for (int i = 0; i < count; i++)

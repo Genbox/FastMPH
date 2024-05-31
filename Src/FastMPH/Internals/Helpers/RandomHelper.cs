@@ -1,8 +1,8 @@
 ﻿namespace Genbox.FastMPH.Internals;
 
-public static class RandomProvider
+public static class RandomHelper
 {
     private static readonly Random _rng = new Random(42);
 
-    public static Random Random => _rng;
+    public static uint Next() => (uint)_rng.Next();
 }

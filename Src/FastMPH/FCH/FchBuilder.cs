@@ -50,7 +50,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
             LogIteration(iterations);
 
             //Genbox: Removed mod
-            seed0 = (uint)RandomProvider.Random.Next();
+            seed0 = RandomHelper.Next();
 
             LogMappingStep(seed0, b, p1, p2);
             var buckets = Mapping(seed0, b, p1, p2, numItems, keys, hashCode);
@@ -114,7 +114,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
 
         do
         {
-            seed = (uint)RandomProvider.Random.Next();
+            seed = RandomHelper.Next();
             restart = CheckForCollisionsH2(m, seed, buckets, sortedIndexes, hashCode);
             uint filledCount = 0;
 
@@ -239,7 +239,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
     {
         for (int i = 0; i < n; i++)
         {
-            uint j = (uint)(RandomProvider.Random.Next() % n);
+            uint j = RandomHelper.Next() % n;
             (vector[i], vector[j]) = (vector[j], vector[i]);
         }
     }

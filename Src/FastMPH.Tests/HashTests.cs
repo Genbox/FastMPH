@@ -18,7 +18,7 @@ public class HashTests
     [MemberData(nameof(GetImpl))]
     public void PerfectHashTest<TState>(HashFunc<TState?> create, Func<byte[], TState> unpack) where TState : IHashState<byte[]>
     {
-        byte[][] values = RandomHelper.GetRandomStrings(10, 100).DistinctBy(x => x).Select(x => Encoding.UTF8.GetBytes(x)).ToArray();
+        byte[][] values = StringHelper.GetRandomStrings(10, 100).DistinctBy(x => x).Select(x => Encoding.UTF8.GetBytes(x)).ToArray();
 
         Assert.True(create(values, out TState? state));
         Assert.NotNull(state);

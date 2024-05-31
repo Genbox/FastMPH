@@ -68,8 +68,8 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
                 LogIteration(iterations);
 
                 //Genbox: In the original code it called modulus to reduce the keyspace of the seed. However, I don't see why that is necessary.
-                seed0 = (uint)RandomProvider.Random.Next();
-                seed1 = (uint)RandomProvider.Random.Next();
+                seed0 = RandomHelper.Next();
+                seed1 = RandomHelper.Next();
 
                 if (GenerateEdges(graph, numVertices, seed0, seed1, keys, hashCode))
                     break;

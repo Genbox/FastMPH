@@ -100,7 +100,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
 
             //Genbox: The original code used modulus to reduce the keyspace of the seed. However, I don't see any reason to do
             //        that, as the hash function works the same no matter the key space.
-            seed = (uint)RandomProvider.Random.Next();
+            seed = RandomHelper.Next();
 
             if (MappingStep(keys, seed, numPartitions, numEdges, graph, queue, hashCode))
                 break;

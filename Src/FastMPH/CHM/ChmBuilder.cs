@@ -49,8 +49,8 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
             LogIteration(iterations);
 
             //Genbox: Don't use mod to reduce the keyspace. There is no need for it.
-            seed0 = (uint)RandomProvider.Random.Next();
-            seed1 = (uint)RandomProvider.Random.Next();
+            seed0 = RandomHelper.Next();
+            seed1 = RandomHelper.Next();
 
             if (GenerateEdges(graph, seed0, seed1, numVertices, keys, hashCode))
                 break;

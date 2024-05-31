@@ -21,7 +21,7 @@ public class HashBenchmarks
     [GlobalSetup]
     public void PrepareData()
     {
-        _data = RandomHelper.GetRandomStrings(10, 1_000).ToArray();
+        _data = StringHelper.GetRandomStrings(10, 1_000).ToArray();
         _query = _data[_data.Length - 1];
     }
 

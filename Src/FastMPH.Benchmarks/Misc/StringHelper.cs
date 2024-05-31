@@ -1,6 +1,6 @@
 namespace Genbox.FastMPH.Benchmarks.Misc;
 
-public static class RandomHelper
+public static class StringHelper
 {
     private const string _alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Description>A C# port of the minimal perfect hash function library CMPH.</Description>
     <PackageTags>MPHF hash index</PackageTags>
-    <PackageLicenseExpression>LGPL-3.0</PackageLicenseExpression>
+    <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
   </PropertyGroup>
 
 </Project>

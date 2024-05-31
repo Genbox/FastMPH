@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
 
 namespace Genbox.FastMPH.CHD.Internal;
@@ -9,12 +8,6 @@ internal sealed class Select
     private const int NbitsStepSelectTable = 7;
     private const int StepSelectTable = 128;
     private const int MaskStepSelectTable = 127;
-
-    private uint _n;
-    private uint _m;
-    private uint[] _selectTable;
-
-    public uint[] BitsVec;
 
     //TODO: Lazy load
     private static readonly byte[] LookupTable0 =
@@ -155,52 +148,13 @@ internal sealed class Select
         { 1, 2, 3, 4, 5, 6, 7, 255 }, { 0, 1, 2, 3, 4, 5, 6, 7 }
     };
 
-    internal Select() {}
+    private readonly uint _m;
+    private readonly uint _n;
+    private readonly uint[] _selectTable;
 
-    private Select(uint n, uint m, uint[] selectTable, uint[] bitsVec)
-    {
-        _n = n;
-        _m = m;
-        _selectTable = selectTable;
-        BitsVec = bitsVec;
-    }
+    public readonly uint[] BitsVec;
 
-    private static void Insert0(ref uint buffer) => buffer >>= 1;
-
-    private static void Insert1(ref uint buffer)
-    {
-        buffer >>= 1;
-        buffer |= 0x80000000;
-    }
-
-    private void GenerateTable()
-    {
-        uint vecIdx, oneIdx, selTableIdx;
-        uint partSum = vecIdx = oneIdx = selTableIdx = 0;
-
-        Span<byte> bitsTable = MemoryMarshal.AsBytes(BitsVec.AsSpan());
-
-        //Genbox converted for loop to while loop
-        while (true)
-        {
-            // FABIANO: Should'n it be one_idx >= sel->n
-            if (oneIdx >= _n)
-                break;
-            uint oldPartSum;
-            do
-            {
-                oldPartSum = partSum;
-                partSum += LookupTable0[bitsTable[(int)vecIdx]];
-                vecIdx++;
-            } while (partSum <= oneIdx);
-
-            _selectTable[selTableIdx] = LookupTable1[bitsTable[(int)(vecIdx - 1)], oneIdx - oldPartSum] + ((vecIdx - 1) << 3); // ((vec_idx - 1) << 3) = ((vec_idx - 1) * 8)
-            oneIdx += StepSelectTable;
-            selTableIdx++;
-        }
-    }
-
-    public void Generate(uint[] keysVec, uint newN, uint newM)
+    internal Select(uint[] keysVec, uint newN, uint newM)
     {
         uint i, j;
         uint buffer = 0;
@@ -259,6 +213,49 @@ internal sealed class Select
         GenerateTable();
     }
 
+    private Select(uint n, uint m, uint[] selectTable, uint[] bitsVec)
+    {
+        _n = n;
+        _m = m;
+        _selectTable = selectTable;
+        BitsVec = bitsVec;
+    }
+
+    private static void Insert0(ref uint buffer) => buffer >>= 1;
+
+    private static void Insert1(ref uint buffer)
+    {
+        buffer >>= 1;
+        buffer |= 0x80000000;
+    }
+
+    private void GenerateTable()
+    {
+        uint vecIdx, oneIdx, selTableIdx;
+        uint partSum = vecIdx = oneIdx = selTableIdx = 0;
+
+        Span<byte> bitsTable = MemoryMarshal.AsBytes(BitsVec.AsSpan());
+
+        //Genbox converted for loop to while loop
+        while (true)
+        {
+            // FABIANO: Should'n it be one_idx >= sel->n
+            if (oneIdx >= _n)
+                break;
+            uint oldPartSum;
+            do
+            {
+                oldPartSum = partSum;
+                partSum += LookupTable0[bitsTable[(int)vecIdx]];
+                vecIdx++;
+            } while (partSum <= oneIdx);
+
+            _selectTable[selTableIdx] = LookupTable1[bitsTable[(int)(vecIdx - 1)], oneIdx - oldPartSum] + ((vecIdx - 1) << 3); // ((vec_idx - 1) << 3) = ((vec_idx - 1) * 8)
+            oneIdx += StepSelectTable;
+            selTableIdx++;
+        }
+    }
+
     private uint Query(uint[] selectTable, uint oneIdx)
     {
         Span<byte> bitsTable = MemoryMarshal.AsBytes(BitsVec.AsSpan());
@@ -302,15 +299,12 @@ internal sealed class Select
         return LookupTable1[bitsTable[(int)(vecByteIdx - 1)], oneIdx - oldPartSum] + ((vecByteIdx - 1) << 3);
     }
 
-    public uint GetPackedSize()
-    {
-        return sizeof(uint) + //_n
-               sizeof(uint) + //_m
-               sizeof(uint) + //_selectTable length
-               sizeof(uint) * (uint)_selectTable.Length + //_selectTable
-               sizeof(uint) + //BitsVec length
-               sizeof(uint) * (uint)BitsVec.Length; //BitsVec
-    }
+    public uint GetPackedSize() => sizeof(uint) + //_n
+                                   sizeof(uint) + //_m
+                                   sizeof(uint) + //_selectTable length
+                                   (sizeof(uint) * (uint)_selectTable.Length) + //_selectTable
+                                   sizeof(uint) + //BitsVec length
+                                   (sizeof(uint) * (uint)BitsVec.Length); //BitsVec
 
     public void Pack(SpanWriter sw)
     {

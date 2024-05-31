@@ -34,8 +34,8 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
 
         _hashCode(key, Seed, hashes);
         hashes[0] = hashes[0] % Partitions;
-        hashes[1] = hashes[1] % Partitions + Partitions;
-        hashes[2] = hashes[2] % Partitions + (Partitions << 1); // n + n * 2
+        hashes[1] = (hashes[1] % Partitions) + Partitions;
+        hashes[2] = (hashes[2] % Partitions) + (Partitions << 1); // n + n * 2
 
         byte byte0 = LookupTable[hashes[0] / 5];
         byte byte1 = LookupTable[hashes[1] / 5];
@@ -46,18 +46,7 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
         byte0 = lookup[hashes[0] % 5U][byte0];
         byte1 = lookup[hashes[1] % 5U][byte1];
         byte2 = lookup[hashes[2] % 5U][byte2];
-        uint vertex = hashes[(byte0 + byte1 + byte2) % 3];
-        return vertex;
-
-        // int combined = (byte0 + byte1 + byte2) % 3;
-        //
-        // if (combined == 0)
-        //     return h0;
-        //
-        // if (combined == 1)
-        //     return h1;
-        //
-        // return h2;
+        return hashes[(byte0 + byte1 + byte2) % 3];
     }
 
     /// <inheritdoc />
@@ -78,13 +67,13 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
         uint size = sizeof(uint) + //Seed
                     sizeof(uint) + //NumPartitions
                     sizeof(uint) + //LookupTable length
-                    sizeof(byte) * (uint)LookupTable.Length; //LookupTable
+                    (sizeof(byte) * (uint)LookupTable.Length); //LookupTable
 
         return size;
     }
 
     /// <summary>
-    /// Deserialize a serialized perfect hash function into a new instance of <see cref="BdzState{TKey}"/>
+    /// Deserialize a serialized perfect hash function into a new instance of <see cref="BdzState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="comparer">The equality comparer that was used when packing the hash function</param>

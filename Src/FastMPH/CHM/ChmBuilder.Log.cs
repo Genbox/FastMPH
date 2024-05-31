@@ -39,8 +39,8 @@ public partial class ChmBuilder<TKey>
     [LoggerMessage(Level = LogLevel.Trace, Message = "Self loop for key {key}")]
     private partial void LogSelfLoop(int key);
 
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Adding edge: {h1} -> {h2} for key {key}")]
-    private partial void LogAddingEdge(string? key, uint h1, uint h2);
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Adding edge: {h1} -> {h2}")]
+    private partial void LogAddingEdge(uint h1, uint h2);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Cyclic graph created")]
     private partial void LogCyclicGraph();

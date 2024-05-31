@@ -8,8 +8,8 @@ namespace Genbox.FastMPH.CHD;
 [PublicAPI]
 public sealed class ChdMinimalState<TKey> : IHashState<TKey> where TKey : notnull
 {
-    private readonly ChdState<TKey> _state;
     private readonly CompressedRank _rank;
+    private readonly ChdState<TKey> _state;
 
     internal ChdMinimalState(ChdState<TKey> state, CompressedRank rank)
     {
@@ -36,7 +36,7 @@ public sealed class ChdMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     }
 
     /// <summary>
-    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="ChdMinimalState{TKey}"/>
+    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="ChdMinimalState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     public static ChdMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed)

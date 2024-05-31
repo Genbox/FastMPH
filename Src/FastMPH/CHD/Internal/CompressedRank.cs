@@ -5,13 +5,11 @@ namespace Genbox.FastMPH.CHD.Internal;
 
 internal sealed class CompressedRank : IPackable
 {
-    private uint _maxVal;
-    private uint _remR;
-    private uint _valsRemsCount;
-    private uint[] _valsRems;
+    private readonly uint _maxVal;
+    private readonly uint _remR;
     private readonly Select _sel;
-
-    public CompressedRank() => _sel = new Select();
+    private readonly uint[] _valsRems;
+    private readonly uint _valsRemsCount;
 
     private CompressedRank(uint maxVal, uint remR, uint valsRemsCount, uint[] valsRems, Select sel)
     {
@@ -22,7 +20,7 @@ internal sealed class CompressedRank : IPackable
         _sel = sel;
     }
 
-    public void Generate(uint[] valsTable, uint num)
+    public CompressedRank(uint[] valsTable, uint num)
     {
         uint i, j;
         _valsRemsCount = num;
@@ -49,8 +47,28 @@ internal sealed class CompressedRank : IPackable
 
         // FABIANO: before it was (cr->total_length >> cr->rem_r) + 1. But I wiped out the + 1 because
         // I changed the select structure to work up to m, instead of up to m - 1.
+        _sel = new Select(selectVec, _maxVal >> (int)_remR, _valsRemsCount);
+    }
 
-        _sel.Generate(selectVec, _maxVal >> (int)_remR, _valsRemsCount);
+    public uint GetPackedSize() => sizeof(uint) + //_maxVal
+                                   sizeof(uint) + //_remR
+                                   sizeof(uint) + //_valsRemsCount
+                                   sizeof(uint) + //_valsRems length
+                                   (sizeof(uint) * (uint)_valsRems.Length) + //_valsRems
+                                   _sel.GetPackedSize();
+
+    public void Pack(Span<byte> buffer)
+    {
+        SpanWriter sw = new SpanWriter(buffer);
+        sw.WriteUInt32(_maxVal);
+        sw.WriteUInt32(_remR);
+        sw.WriteUInt32(_valsRemsCount);
+        sw.WriteUInt32((uint)_valsRems.Length);
+
+        foreach (uint u in _valsRems)
+            sw.WriteUInt32(u);
+
+        _sel.Pack(sw);
     }
 
     public uint Query(uint idx)
@@ -86,30 +104,6 @@ internal sealed class CompressedRank : IPackable
         }
 
         return rank;
-    }
-
-    public uint GetPackedSize()
-    {
-        return sizeof(uint) + //_maxVal
-               sizeof(uint) + //_remR
-               sizeof(uint) + //_valsRemsCount
-               sizeof(uint) + //_valsRems length
-               sizeof(uint) * (uint)_valsRems.Length + //_valsRems
-               _sel.GetPackedSize();
-    }
-
-    public void Pack(Span<byte> buffer)
-    {
-        SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(_maxVal);
-        sw.WriteUInt32(_remR);
-        sw.WriteUInt32(_valsRemsCount);
-        sw.WriteUInt32((uint)_valsRems.Length);
-
-        foreach (uint u in _valsRems)
-            sw.WriteUInt32(u);
-
-        _sel.Pack(sw);
     }
 
     public static CompressedRank Unpack(ReadOnlySpan<byte> data)

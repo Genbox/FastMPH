@@ -31,7 +31,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(comparer);
 
         uint numKeys = (uint)keys.Length;
-        uint numBuckets = numKeys / settings.KeysPerBucket + 1;
+        uint numBuckets = (numKeys / settings.KeysPerBucket) + 1;
 
         LogCreating(numKeys, numBuckets, settings.LoadFactor, settings.KeysPerBin, settings.KeysPerBucket);
 
@@ -67,7 +67,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             maxProbes *= maxProbesDefault;
 
         //Genbox: refactored this a bit
-        uint size = settings.KeysPerBin == 1 ? (numBins + 31) / 32 * sizeof(uint) : numBins * sizeof(uint);
+        uint size = settings.KeysPerBin == 1 ? ((numBins + 31) / 32) * sizeof(uint) : numBins * sizeof(uint);
 
         byte[] occupTable = new byte[size];
         uint[] dispTable = new uint[numBuckets];
@@ -80,7 +80,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         {
             LogMappingStep(numKeys, numBins);
 
-            if (!Mapping(numKeys, numBins, numBuckets, keys, hashCode, buckets, items, out uint maxBucketSize, out seed))
+            if (!ChdBuilder<TKey>.Mapping(numKeys, numBins, numBuckets, keys, hashCode, buckets, items, out uint maxBucketSize, out seed))
             {
                 LogFailed();
                 state = null;
@@ -109,8 +109,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         }
 
         LogCompressingStep();
-        CompressedSequence cs = new CompressedSequence();
-        cs.Generate(dispTable, numBuckets);
+        CompressedSequence cs = new CompressedSequence(dispTable, numBuckets);
 
         LogSuccess(seed);
         state = new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, hashCode);
@@ -128,8 +127,6 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             return false;
         }
 
-        CompressedRank cr = new CompressedRank();
-
         uint numBins = phState.Bins;
         uint numKeys = phState.NumKeys;
         uint numValues = numBins - numKeys;
@@ -143,12 +140,12 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
                 valsTable[idx++] = i;
         }
 
-        cr.Generate(valsTable, numValues);
+        CompressedRank cr = new CompressedRank(valsTable, numValues);
         state = new ChdMinimalState<TKey>(phState, cr);
         return true;
     }
 
-    private bool Mapping<T>(uint numKeys, uint numBins, uint numBuckets, ReadOnlySpan<T> keys, HashCode3<T> hashCode, Bucket[] buckets, Item[] items, out uint maxBucketSize, out uint seed)
+    private static bool Mapping<T>(uint numKeys, uint numBins, uint numBuckets, ReadOnlySpan<T> keys, HashCode3<T> hashCode, Bucket[] buckets, Item[] items, out uint maxBucketSize, out uint seed)
     {
         maxBucketSize = 0;
 
@@ -180,7 +177,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
                 MapItem mapItem = mapItems[i];
                 mapItem.F = hashes[1] % numBins;
-                mapItem.H = hashes[2] % (numBins - 1) + 1;
+                mapItem.H = (hashes[2] % (numBins - 1)) + 1;
                 mapItem.BucketNum = g;
                 buckets[g].Size++;
 
@@ -321,7 +318,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         return true;
     }
 
-    private bool PlaceBucket(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxProbes, uint[] dispTable, uint bucketNum, uint size)
+    private static bool PlaceBucket(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxProbes, uint[] dispTable, uint bucketNum, uint size)
     {
         uint probe0Num = 0;
         uint probe1Num = 0;
@@ -331,7 +328,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         {
             if (PlaceBucketProbe(keysPerBin, occupTable, numBins, buckets, items, probe0Num, probe1Num, bucketNum, size))
             {
-                dispTable[buckets[bucketNum].BucketId] = probe0Num + probe1Num * numBins;
+                dispTable[buckets[bucketNum].BucketId] = probe0Num + (probe1Num * numBins);
                 return true;
             }
             probe0Num++;
@@ -369,7 +366,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
                     // if bucket is successfully placed remove it from list
                     if (PlaceBucketProbe(keysPerBin, occupTable, numBins, buckets, items, probe0Num, probe1Num, currBucket, i))
                     {
-                        dispTable[buckets[currBucket].BucketId] = probe0Num + probe1Num * numBins;
+                        dispTable[buckets[currBucket].BucketId] = probe0Num + (probe1Num * numBins);
                         LogDisplacement(currBucket, dispTable[currBucket]);
                     }
                     else
@@ -427,7 +424,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             {
                 Item item = items[ptr];
 
-                position = (uint)((item.F + (ulong)item.H * probe0Num + probe1Num) % n);
+                position = (uint)((item.F + ((ulong)item.H * probe0Num) + probe1Num) % n);
 
                 if (occupTable[position] >= keysPerBin)
                     break;
@@ -442,7 +439,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             {
                 Item item = items[ptr];
 
-                position = (uint)((item.F + (ulong)item.H * probe0Num + probe1Num) % n);
+                position = (uint)((item.F + ((ulong)item.H * probe0Num) + probe1Num) % n);
                 if (GetBit(occup, position))
                     break;
 
@@ -462,7 +459,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
                     if (i == 0)
                         break;
-                    position = (uint)((item.F + (ulong)item.H * probe0Num + probe1Num) % n);
+                    position = (uint)((item.F + ((ulong)item.H * probe0Num) + probe1Num) % n);
                     occupTable[position]--;
                     ptr++;
                     i--;
@@ -477,7 +474,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
                     if (i == 0)
                         break;
 
-                    position = (uint)((item.F + (ulong)item.H * probe0Num + probe1Num) % n);
+                    position = (uint)((item.F + ((ulong)item.H * probe0Num) + probe1Num) % n);
                     UnsetBit(occup, position);
 
                     ptr++;
@@ -518,7 +515,6 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         return true;
     }
 
-    //TODO: Could be struct
     private sealed class Bucket
     {
         public uint ItemsList; // offset
@@ -531,26 +527,23 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         }
     }
 
-    //TODO: Could be struct
     private sealed class SortedList
     {
         public uint BucketList;
         public uint Size;
     }
 
-    //TODO: Could be struct
     private sealed class Item
     {
         public uint F;
         public uint H;
     }
 
-    //TODO: Could be struct
     private sealed class MapItem
     {
+        public uint BucketNum;
         public uint F;
         public uint H;
-        public uint BucketNum;
     }
 
     private static class MillerRabin
@@ -592,8 +585,8 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             while (d > 0)
             {
                 if ((d & 1) == 1)
-                    res = res * aPow % n;
-                aPow = aPow * aPow % n;
+                    res = (res * aPow) % n;
+                aPow = (aPow * aPow) % n;
                 d /= 2;
             }
             return res;
@@ -607,7 +600,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
             for (ulong i = 1; i < s; ++i)
             {
-                aExp = aExp * aExp % n;
+                aExp = (aExp * aExp) % n;
                 if (aExp == n - 1)
                     return true;
             }

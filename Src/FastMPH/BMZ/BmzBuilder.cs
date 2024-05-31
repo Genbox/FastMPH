@@ -89,8 +89,8 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
             // Searching step
             LogStartSearching();
 
-            byte[] visited = new byte[numVertices / 8 + 1];
-            byte[] usedEdges = new byte[numEdges / 8 + 1];
+            byte[] visited = new byte[(numVertices / 8) + 1];
+            byte[] usedEdges = new byte[(numEdges / 8) + 1];
 
             //Genbox: Originally lookupTable (g) was allocated on each loop. I've moved it out and reuse it.
             Array2.Clear(lookupTable);
@@ -151,7 +151,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
 
             if (h1 == h2)
             {
-                LogSelfLoop(key.ToString(), h1, h2);
+                LogSelfLoop(h1, h2);
                 return false;
             }
 
@@ -162,7 +162,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
                 return false; // checking multiple edge restriction.
             }
 
-            LogAddingEdge(key.ToString(), h1, h2);
+            LogAddingEdge(h1, h2);
             graph.AddEdge(h1, h2);
         }
 
@@ -408,8 +408,8 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
     //TODO: Could be struct
     private sealed class Queue
     {
-        private readonly uint[] _values;
         private readonly uint _capacity;
+        private readonly uint[] _values;
         private uint _begin;
         private uint _end;
 

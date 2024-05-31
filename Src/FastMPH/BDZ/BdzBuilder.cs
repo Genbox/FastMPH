@@ -73,7 +73,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
     private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, bool minimal, double loadFactor, uint iterations, out uint numPartitions, out uint numVertices, out uint seed, [NotNullWhen(true)]out byte[]? lookupTable)
     {
         uint numEdges = (uint)keys.Length;
-        numPartitions = (uint)Math.Ceiling(loadFactor * numEdges / 3);
+        numPartitions = (uint)Math.Ceiling((loadFactor * numEdges) / 3);
 
         if (numPartitions % 2 == 0)
             numPartitions++;
@@ -127,7 +127,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         {
             uint idx = i / 5;
             byte value = GetValue(lookupTable, i);
-            newLookup[idx] = (byte)(newLookup[idx] + value * BdzShared.Pow3Table[i % 5]);
+            newLookup[idx] = (byte)(newLookup[idx] + (value * BdzShared.Pow3Table[i % 5]));
         }
 
         return newLookup;
@@ -199,7 +199,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
             SetBit(markedEdge, tmpEdge);
         }
 
-        return (int)(queueHead - numEdges); /* returns 0 if successful otherwise return negative number*/
+        return (int)queueHead - (int)numEdges; /* returns 0 if successful otherwise return negative number*/
     }
 
     private bool MappingStep(ReadOnlySpan<TKey> keys, uint seed, uint numPartitions, uint numEdges, Graph graph, uint[] queue, HashCode3<TKey> hashCode)
@@ -215,8 +215,8 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         {
             hashCode(keys[i], seed, hashes);
             hashes[0] = hashes[0] % numPartitions;
-            hashes[1] = hashes[1] % numPartitions + numPartitions;
-            hashes[2] = hashes[2] % numPartitions + (numPartitions << 1); //n + 2 * n
+            hashes[1] = (hashes[1] % numPartitions) + numPartitions;
+            hashes[2] = (hashes[2] % numPartitions) + (numPartitions << 1); //n + 2 * n
 
             LogAddingEdge(hashes[0], hashes[1], hashes[2]);
             graph.AddEdge(hashes[0], hashes[1], hashes[2]);
@@ -339,10 +339,10 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
 
     private sealed class Graph
     {
+        private const uint NullEdge = 0xffffffff;
         public readonly Edge[] Edges;
         public readonly uint[] FirstEdge;
         public readonly byte[] VertexDegree;
-        private const uint NullEdge = 0xffffffff;
 
         public uint NumEdges;
 

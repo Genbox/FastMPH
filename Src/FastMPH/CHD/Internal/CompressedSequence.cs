@@ -5,27 +5,13 @@ namespace Genbox.FastMPH.CHD.Internal;
 
 internal sealed class CompressedSequence
 {
-    private uint _remR;
-    private uint _totalLength; // total length in bits of stored_table
+    private readonly uint[] _lengthRems;
+    private readonly uint _remR;
     private readonly Select _sel;
-    private uint[] _lengthRems;
-    private uint[] _storeTable;
+    private readonly uint[] _storeTable;
+    private readonly uint _totalLength; // total length in bits of stored_table
 
-    public CompressedSequence()
-    {
-        _sel = new Select();
-    }
-
-    private CompressedSequence(uint remR, uint totalLength, uint[] lengthRems, uint[] storeTable, Select sel)
-    {
-        _remR = remR;
-        _totalLength = totalLength;
-        _lengthRems = lengthRems;
-        _storeTable = storeTable;
-        _sel = sel;
-    }
-
-    public void Generate(uint[] valsTable, uint n)
+    public CompressedSequence(uint[] valsTable, uint n)
     {
         // lengths: represents lengths of encoded values
         uint[] lengths = new uint[n];
@@ -75,7 +61,16 @@ internal sealed class CompressedSequence
 
         // FABIANO: before it was (cs->total_length >> cs->rem_r) + 1. But I wiped out the + 1 because
         // I changed the select structure to work up to m, instead of up to m - 1.
-        _sel.Generate(lengths, n, _totalLength >> (int)_remR);
+        _sel = new Select(lengths, n, _totalLength >> (int)_remR);
+    }
+
+    private CompressedSequence(uint remR, uint totalLength, uint[] lengthRems, uint[] storeTable, Select sel)
+    {
+        _remR = remR;
+        _totalLength = totalLength;
+        _lengthRems = lengthRems;
+        _storeTable = storeTable;
+        _sel = sel;
     }
 
     public uint Query(uint idx)
@@ -112,16 +107,13 @@ internal sealed class CompressedSequence
         return storedValue + ((1U << (int)encLength) - 1U);
     }
 
-    public uint GetPackedSize()
-    {
-        return sizeof(uint) + // _remR
-               sizeof(uint) + // _totalLength
-               sizeof(uint) + // _lengthRems length
-               sizeof(uint) * (uint)_lengthRems.Length + // _lengthRems
-               sizeof(uint) + // _storeTable length
-               sizeof(uint) * (uint)_storeTable.Length + // _storeTable
-               _sel.GetPackedSize(); //_sel
-    }
+    public uint GetPackedSize() => sizeof(uint) + // _remR
+                                   sizeof(uint) + // _totalLength
+                                   sizeof(uint) + // _lengthRems length
+                                   (sizeof(uint) * (uint)_lengthRems.Length) + // _lengthRems
+                                   sizeof(uint) + // _storeTable length
+                                   (sizeof(uint) * (uint)_storeTable.Length) + // _storeTable
+                                   _sel.GetPackedSize(); //_sel
 
     public void Pack(SpanWriter writer)
     {

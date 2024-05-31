@@ -9,13 +9,11 @@ internal sealed partial class Graph
 {
     public const uint GraphNoNeighbor = uint.MaxValue;
     private const uint Empty = uint.MaxValue;
-
-    private readonly uint _nodeCount;
     private readonly uint _edgeCount;
     private readonly uint[] _edges;
     private readonly uint[] _first;
     private readonly uint[] _next;
-
+    private readonly uint _nodeCount;
     private byte[]? _criticalNodes;
     private uint _criticalNodesCount;
     private uint _edgeCountOld;
@@ -54,7 +52,7 @@ internal sealed partial class Graph
 
     public bool IsCyclic()
     {
-        byte[] deleted = new byte[_edgeCount / 8 + 1];
+        byte[] deleted = new byte[(_edgeCount / 8) + 1];
 
         for (uint v = 0; v < _nodeCount; ++v)
             DeleteCyclicEdge(v, deleted);
@@ -70,8 +68,8 @@ internal sealed partial class Graph
 
     public void ObtainCriticalNodes()
     {
-        byte[] deleted = new byte[_edgeCount / 8 + 1];
-        _criticalNodes = new byte[_nodeCount / 8 + 1];
+        byte[] deleted = new byte[(_edgeCount / 8) + 1];
+        _criticalNodes = new byte[(_nodeCount / 8) + 1];
         Array2.Clear(_criticalNodes);
         _criticalNodesCount = 0;
 
@@ -173,7 +171,7 @@ internal sealed partial class Graph
         return found;
     }
 
-    private uint AbsEdge(uint e, uint i) => e % _edgeCount + i * _edgeCount;
+    private uint AbsEdge(uint e, uint i) => (e % _edgeCount) + (i * _edgeCount);
 
     public void ClearEdges()
     {
@@ -205,7 +203,7 @@ internal sealed partial class Graph
 
     public uint GetNumCriticalNodes() => _criticalNodesCount;
 
-    public uint GetVertexId(uint e, uint id) => _edges[e + id * _edgeCount];
+    public uint GetVertexId(uint e, uint id) => _edges[e + (id * _edgeCount)];
 
     public bool ContainsEdge(uint v1, uint v2)
     {

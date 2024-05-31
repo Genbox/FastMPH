@@ -15,8 +15,10 @@ namespace Genbox.FastMPH.Benchmarks;
 [MemoryDiagnoser]
 public class HashBenchmarks
 {
-    private string[] _data;
-    private string _query;
+    public delegate void CFunc(ReadOnlySpan<string> data);
+    public delegate uint QFunc(string data);
+    private string[] _data = null!;
+    private string _query = null!;
 
     [GlobalSetup]
     public void PrepareData()
@@ -66,28 +68,25 @@ public class HashBenchmarks
 
         yield return ["Dict", new QFunc(data => lookup.GetValueOrDefault(data, 0u))];
 
-        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreateMinimal(_data, out var state6));
+        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreateMinimal(_data, out ChdMinimalState<string>? state6));
         yield return ["CHD_M", new QFunc(data => state6.Search(data))];
 
-        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreate(_data, out var state7));
+        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreate(_data, out ChdState<string>? state7));
         yield return ["CHD", new QFunc(data => state7.Search(data))];
 
-        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreate(_data, out var state1));
+        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreate(_data, out BdzState<string>? state1));
         yield return ["BDZ", new QFunc(data => state1.Search(data))];
 
-        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreateMinimal(_data, out var state2));
+        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreateMinimal(_data, out BdzMinimalState<string>? state2));
         yield return ["BDZ_M", new QFunc(data => state2.Search(data))];
 
-        Validator.RequireThat(new BmzBuilder<string>(NullLogger<BmzBuilder<string>>.Instance).TryCreateMinimal(_data, out var state3));
+        Validator.RequireThat(new BmzBuilder<string>(NullLogger<BmzBuilder<string>>.Instance).TryCreateMinimal(_data, out BmzMinimalState<string>? state3));
         yield return ["BMZ_M", new QFunc(data => state3.Search(data))];
 
-        Validator.RequireThat(new ChmBuilder<string>(NullLogger<ChmBuilder<string>>.Instance).TryCreateMinimal(_data, out var state4));
+        Validator.RequireThat(new ChmBuilder<string>(NullLogger<ChmBuilder<string>>.Instance).TryCreateMinimal(_data, out ChmMinimalState<string>? state4));
         yield return ["CHM_M", new QFunc(data => state4.Search(data))];
 
-        Validator.RequireThat(new FchBuilder<string>(NullLogger<FchBuilder<string>>.Instance).TryCreateMinimal(_data, out var state5));
+        Validator.RequireThat(new FchBuilder<string>(NullLogger<FchBuilder<string>>.Instance).TryCreateMinimal(_data, out FchMinimalState<string>? state5));
         yield return ["FCH_M", new QFunc(data => state5.Search(data))];
     }
-
-    public delegate void CFunc(ReadOnlySpan<string> data);
-    public delegate uint QFunc(string data);
 }

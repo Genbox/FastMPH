@@ -17,15 +17,13 @@ internal static class Program
             "cow"
         ];
 
-        if (!builder.TryCreate(data, out var state))
+        if (!builder.TryCreate(data, out ChdState<string>? state))
         {
             Console.WriteLine("Unable to create perfect hash function");
             return;
         }
 
         foreach (string item in data)
-        {
             Console.WriteLine($"Hashcode for {item}: {state.Search(item)}");
-        }
     }
 }

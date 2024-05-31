@@ -66,7 +66,7 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
         //Assignment step
         LogAssignmentStep();
 
-        byte[] visited = new byte[numVertices / 8 + 1];
+        byte[] visited = new byte[(numVertices / 8) + 1];
         uint[] lookupTable = new uint[numVertices];
 
         for (uint i = 0; i < numVertices; ++i)
@@ -128,8 +128,7 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
                 return false;
             }
 
-            LogAddingEdge(key.ToString(), h1, h2);
-
+            LogAddingEdge(h1, h2);
             graph.AddEdge(h1, h2);
         }
 

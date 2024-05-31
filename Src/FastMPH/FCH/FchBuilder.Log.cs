@@ -27,8 +27,8 @@ public partial class FchBuilder<TKey> where TKey : notnull
     [LoggerMessage(Level = LogLevel.Trace, Message = "g[{index}]: {value}")]
     private partial void LogSearchStatus(uint index, uint value);
 
-    [LoggerMessage(Level = LogLevel.Trace, Message = "key:{key}  index:{index}  h2:{h2}  bucket size:{bucketSize}")]
-    private partial void LogSearchStatus2(string? key, uint index, uint h2, uint bucketSize);
+    [LoggerMessage(Level = LogLevel.Trace, Message = "index:{index}  h2:{h2}  bucket size:{bucketSize}")]
+    private partial void LogSearchStatus2(uint index, uint h2, uint bucketSize);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "bucket {bucket} -- nkeys: {numKeys}")]
     private partial void LogBucket(int bucket, uint numKeys);

@@ -33,11 +33,11 @@ public partial class BmzBuilder<TKey>
     [LoggerMessage(Level = LogLevel.Trace, Message = "Generating edges for {numVertices} vertices")]
     private partial void LogGeneratingEdges(uint numVertices);
 
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Self-loop detected for key: {key} h1: {h1} h2: {h2}")]
-    private partial void LogSelfLoop(string? key, uint h1, uint h2);
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Self-loop detected. h1: {h1} h2: {h2}")]
+    private partial void LogSelfLoop(uint h1, uint h2);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Adding edge for {h1} -> {h2}")]
-    private partial void LogAddingEdge(string? key, uint h1, uint h2);
+    private partial void LogAddingEdge(uint h1, uint h2);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Non-simple graph was generated")]
     private partial void LogNonSimpleGraph();

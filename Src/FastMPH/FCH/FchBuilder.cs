@@ -53,7 +53,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
             seed0 = RandomHelper.Next();
 
             LogMappingStep(seed0, b, p1, p2);
-            var buckets = Mapping(seed0, b, p1, p2, numItems, keys, hashCode);
+            Buckets<TKey> buckets = Mapping(seed0, b, p1, p2, numItems, keys, hashCode);
 
             LogOrderingStep();
             uint[] sortedIndexes = Ordering(buckets);
@@ -145,7 +145,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
                     uint hashVal = hashCode(key, seed);
                     uint h2 = hashVal % m;
 
-                    lookupTable[sortedIndexes[i]] = (m + randomTable[filledCount + z] - h2) % m;
+                    lookupTable[sortedIndexes[i]] = ((m + randomTable[filledCount + z]) - h2) % m;
 
                     LogSearchStatus(sortedIndexes[i], lookupTable[sortedIndexes[i]]);
 
@@ -160,7 +160,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
                         h2 = hashVal2 % m;
                         uint index = (h2 + lookupTable[sortedIndexes[i]]) % m;
 
-                        LogSearchStatus2(key.ToString(), index, h2, bucketSize);
+                        LogSearchStatus2(index, h2, bucketSize);
 
                         if (mapTable[index] >= filledCount)
                         {
@@ -229,7 +229,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         return false;
     }
 
-    private static uint CalculateB(double c, uint m) => (uint)Math.Ceiling(c * m / (Math.Log(m) / Math.Log(2.0) + 1));
+    private static uint CalculateB(double c, uint m) => (uint)Math.Ceiling((c * m) / ((Math.Log(m) / Math.Log(2.0)) + 1));
 
     private static double CalculateP1(uint m) => Math.Ceiling(0.55 * m);
 
@@ -244,15 +244,18 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         }
     }
 
-    //TODO: struct?
     private sealed class Bucket<T>
     {
         private readonly ILogger _logger;
-        private T[] _entries;
         private uint _capacity;
+        private T[] _entries;
         private uint _size;
 
-        public Bucket(ILogger logger) => _logger = logger;
+        public Bucket(ILogger logger)
+        {
+            _logger = logger;
+            _entries = new T[1];
+        }
 
         private void Reserve(uint size)
         {
@@ -281,11 +284,10 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         public T GetKey(uint indexKey) => _entries[indexKey];
     }
 
-    //TODO: struct?
     private sealed class Buckets<T>
     {
-        private readonly Bucket<T>[] _values;
         private readonly uint _numBuckets;
+        private readonly Bucket<T>[] _values;
         private uint _maxSize;
 
         public Buckets(ILogger logger, uint numBuckets)

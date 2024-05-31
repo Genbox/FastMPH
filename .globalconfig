@@ -206,8 +206,11 @@ dotnet_diagnostic.s2997.severity = error # "IDisposables" created in a "using" s
 dotnet_diagnostic.s125.severity = none # Sections of code should not be commented out
 dotnet_diagnostic.syslib1006.severity = none # Multiple logging methods are using event id -1 in class <class>
 dotnet_diagnostic.syslib1015.severity = error # Argument '<argument>' is not referenced from the logging message
+dotnet_diagnostic.syslib1014.severity = none # Template 'key' is not provided as argument to the logging method (using CS0103 instead)
+dotnet_diagnostic.ma0018.severity = none # Do not declare static members on generic types (deprecated; use CA1000 instead)
+dotnet_diagnostic.rcs1058.severity = none # Use compound assignment
+dotnet_diagnostic.s907.severity = none # "goto" statement should not be used
 
 # Broken
 dotnet_diagnostic.S2589.severity = none # Boolean expressions should not be gratuitous
 dotnet_diagnostic.S2583.severity = none # Conditionally executed code should be reachable
-

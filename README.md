@@ -4,11 +4,13 @@
 [![License](https://img.shields.io/github/license/Genbox/FastMPH)](https://github.com/Genbox/FastMPH/blob/master/LICENSE.txt)
 
 ### Description
+
 A C# port of the minimal perfect hash function library [CMPH](https://cmph.sourceforge.net/).
 
 ### Features
 
 Supports the following algorithms:
+
 * [BDZ](https://cmph.sourceforge.net/bdz.html) (MPH + PH)
 * [BMZ](https://cmph.sourceforge.net/bmz.html) (MPH)
 * [CHD](https://cmph.sourceforge.net/chd.html) (MPH + PH)
@@ -16,6 +18,7 @@ Supports the following algorithms:
 * [FCH](https://cmph.sourceforge.net/fch.html) (MPH)
 
 Other features:
+
 * Pack/unpack each hash function to a `Span<byte>`
 * Logging is supported via [Microsoft.Extensions.Logging](https://www.nuget.org/packages/Microsoft.Extensions.Logging/)
 
@@ -77,52 +80,65 @@ hash("horse") % 4 = 2
 hash("cow") % 4 = 1
 ```
 
-As can be seen, both "elephant" and "cow" gets the same index. That is what we call a hash collision. In a hash table/set this has to be addressed, usually done via [chaining or open addressing](https://en.wikipedia.org/wiki/Hash_table#Collision_resolution).
+As can be seen, both "elephant" and "cow" gets the same index. That is what we call a hash collision. In a hash table/set this has to be addressed, usually done
+via [chaining or open addressing](https://en.wikipedia.org/wiki/Hash_table#Collision_resolution).
 
 A Perfect Hash is a hash function that maps a set of `n` keys to `n` unique integers with no collisions. Therefore there is no need for collision resolution.
 
 #### What is a Minimal Perfect Hash (MPH) function?
+
 A Minimal Perfect Hash is a perfect hash function that has the added benefit of hashing to a range of [0, n-1].
 
 There are usually "holes" in the output of a perfect hash:
+
 ```csharp
 PH("elephant") = 2
 PH("goat") = 1
 PH("horse") = 5
 PH("cow") = 6
 ```
+
 There are no holes in a minimal perfect hash:
+
 ```csharp
 MPH("elephant") = 3
 MPH("goat") = 1
 MPH("horse") = 0
 MPH("cow") = 2
 ```
+
 #### What are the differences compared to CMPH?
 
 All:
+
 * Moving large allocations out of loops
 * Lazy loading lookup tables to reduce memory usage
 * Some implementations had their number of iterations hardcoded. I've made them configurable.
 * Some implementations used modulus to reduce the keyspace of the seed, but the hash function don't care, so I've removed the reduction.
 
 BDZ:
+
 * It did 100 iterations with the same 16 hash functions. It now does `n` iterations with random hash functions.
 
 BMZ:
+
 * Use 2 seeds instead of 3. The third seed was never used.
 
 #### What can I use it for?
+
 This library implements several PH/MPH functions intended to be used for mapping a value to an integer.
 Its primary use case is for mapping values in hash tables/sets.
 
 It only benefits situations when:
+
 - Data is completely static
 - Your dataset is too big for other perfect hash functions
 - You are using a mapping table and want to reduce memory usage
 
 ### Benchmarks
+
 Benchmarks are sorted from fastest to slowest.
+
 * `Dict` is the .NET Dictionary implementation.
 * `_M` means it is the minimal variant of the hash function.
 

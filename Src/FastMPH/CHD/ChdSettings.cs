@@ -8,9 +8,9 @@ namespace Genbox.FastMPH.CHD;
 [PublicAPI]
 public class ChdSettings : HashSettings
 {
-    private double _loadFactor = 0.5;
     private byte _keysPerBin = 1;
     private byte _keysPerBucket = 4;
+    private double _loadFactor = 0.5;
 
     public double LoadFactor
     {

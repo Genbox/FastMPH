@@ -52,17 +52,14 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     }
 
     /// <inheritdoc />
-    public uint GetPackedSize()
-    {
-        return sizeof(uint) + //NumItems
-               sizeof(uint) + //B
-               sizeof(double) + //P1
-               sizeof(double) + //P2
-               sizeof(uint) + //Seed1
-               sizeof(uint) + //Seed2
-               sizeof(uint) + // LookupTable length
-               sizeof(uint) * (uint)LookupTable.Length; //LookupTable
-    }
+    public uint GetPackedSize() => sizeof(uint) + //NumItems
+                                   sizeof(uint) + //B
+                                   sizeof(double) + //P1
+                                   sizeof(double) + //P2
+                                   sizeof(uint) + //Seed1
+                                   sizeof(uint) + //Seed2
+                                   sizeof(uint) + // LookupTable length
+                                   (sizeof(uint) * (uint)LookupTable.Length); //LookupTable
 
     /// <inheritdoc />
     public void Pack(Span<byte> buffer)
@@ -81,7 +78,7 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     }
 
     /// <summary>
-    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="FchMinimalState{TKey}"/>
+    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="FchMinimalState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="comparer">The equality comparer that was used when packing the hash function</param>

@@ -42,6 +42,7 @@ public class HashTests
         IHashState<byte[]> unpacked = unpack(packed);
         Assert.Equivalent(state, unpacked);
 
+        //Test if we can query the unpacked version. It should give us only already known values.
         for (int i = 0; i < values.Length; i++)
         {
             uint index = unpacked.Search(values[i]);

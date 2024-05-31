@@ -11,7 +11,7 @@ internal static class BitBool
         1 << 24, 1 << 25, 1 << 26, 1 << 27, 1 << 28, 1 << 29, 1 << 30, 1U << 31
     };
 
-    public static uint GetBitsTableSize(uint n, uint bitsLength) => (n * bitsLength + 31) >> 5;
+    public static uint GetBitsTableSize(uint n, uint bitsLength) => ((n * bitsLength) + 31) >> 5;
 
     public static void UnsetBit(Span<uint> array, uint i) => array[(int)(i >> 5)] ^= Bitmask32[i & 0x0000001f];
 

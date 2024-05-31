@@ -19,10 +19,10 @@ internal static class HashHelper
 
             uint hash = 42 + Prime5;
 
-            uint value = hash + hc1 * Prime3;
+            uint value = hash + (hc1 * Prime3);
             hash = ((value << 17) | (value >> (32 - 17))) * Prime4;
 
-            uint value3 = hash + hc2 * Prime3;
+            uint value3 = hash + (hc2 * Prime3);
             hash = ((value3 << 17) | (value3 >> (32 - 17))) * Prime4;
 
             hash ^= hash >> 15;

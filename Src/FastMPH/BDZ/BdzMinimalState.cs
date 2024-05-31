@@ -43,8 +43,8 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         _hashCode(key, Seed, hashes);
 
         hashes[0] = hashes[0] % Partitions;
-        hashes[1] = hashes[1] % Partitions + Partitions;
-        hashes[2] = hashes[2] % Partitions + (Partitions << 1); // n + n * 2
+        hashes[1] = (hashes[1] % Partitions) + Partitions;
+        hashes[2] = (hashes[2] % Partitions) + (Partitions << 1); // n + n * 2
 
         uint vertex = hashes[(GetValue(LookupTable, hashes[0]) + GetValue(LookupTable, hashes[1]) + GetValue(LookupTable, hashes[2])) % 3];
         return Rank(BitsOfKey, RankTable, LookupTable, vertex);
@@ -76,16 +76,16 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         uint size = sizeof(uint) + //Seed
                     sizeof(uint) + //NumPartitions
                     sizeof(uint) + //LookupTable length
-                    sizeof(byte) * (uint)LookupTable.Length + //LookupTable
+                    (sizeof(byte) * (uint)LookupTable.Length) + //LookupTable
                     sizeof(uint) + //RankTable length
-                    sizeof(uint) * (uint)RankTable.Length + //RankTable
+                    (sizeof(uint) * (uint)RankTable.Length) + //RankTable
                     sizeof(byte); //NumBitsOfKey
 
         return size;
     }
 
     /// <summary>
-    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BdzState{TKey}"/>
+    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BdzState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="comparer">The equality comparer that was used when packing the hash function</param>

@@ -12,8 +12,8 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
 {
     private readonly CompressedSequence _cs;
     private readonly HashCode3<TKey> _hashCode;
-    internal readonly byte[] OccupTable;
     internal readonly uint NumKeys;
+    internal readonly byte[] OccupTable;
 
     internal ChdState(CompressedSequence cs, uint buckets, uint bins, uint numKeys, uint seed, byte[] occupTable, HashCode3<TKey> hashCode)
     {
@@ -42,13 +42,13 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
         _hashCode(key, Seed, hashes);
         uint g = hashes[0] % Buckets;
         uint f = hashes[1] % Bins;
-        uint h = hashes[2] % (Bins - 1) + 1;
+        uint h = (hashes[2] % (Bins - 1)) + 1;
 
         uint disp = _cs.Query(g);
 
         uint probe0Num = disp % Bins;
         uint probe1Num = disp / Bins;
-        uint position = (uint)((f + (ulong)h * probe0Num + probe1Num) % Bins);
+        uint position = (uint)((f + ((ulong)h * probe0Num) + probe1Num) % Bins);
         return position;
     }
 
@@ -60,7 +60,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
                     sizeof(uint) + //NumBins
                     sizeof(uint) + //NumKeys
                     sizeof(uint) + //OccupTable length
-                    sizeof(byte) * (uint)OccupTable.Length + //OccupTable
+                    (sizeof(byte) * (uint)OccupTable.Length) + //OccupTable
                     sizeof(uint) + //OccupTable length
                     _cs.GetPackedSize();
 
@@ -84,7 +84,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     }
 
     /// <summary>
-    /// Deserialize a serialized perfect hash function into a new instance of <see cref="ChdState{TKey}"/>
+    /// Deserialize a serialized perfect hash function into a new instance of <see cref="ChdState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="comparer">The equality comparer that was used when packing the hash function</param>

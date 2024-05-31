@@ -12,9 +12,7 @@ public static class StringHelper
         for (int i = 0; i < count; i++)
         {
             for (int j = 0; j < length; j++)
-            {
                 buffer[j] = _alphabet[r.Next(0, _alphabet.Length)];
-            }
 
             yield return new string(buffer);
         }

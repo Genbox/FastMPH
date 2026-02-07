@@ -3,7 +3,7 @@ name: Generic build
 on:
   push:
     branches:
-      - 'master'
+      - 'main'
     tags-ignore:
       - '**'
 
@@ -19,10 +19,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4.1.1
-      - name: Setup .NET Core 8.0
-        uses: actions/setup-dotnet@v4.0.0
+      - name: Checkout repo
+        uses: actions/checkout@v6.0.1
+      - name: Setup .NET Core 10.0
+        uses: actions/setup-dotnet@v5.0.1
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       - name: Build
-        run: dotnet build -c Release FastMPH.sln
+        shell: pwsh
+        run: |
+          ./Scripts/Build.ps1

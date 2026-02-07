@@ -76,7 +76,7 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
-    public static ChmMinimalState<TKey> Unpack(Span<byte> packed, IEqualityComparer<TKey>? comparer = null)
+    public static ChmMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
     {
         comparer ??= EqualityComparer<TKey>.Default;
 

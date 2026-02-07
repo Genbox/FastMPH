@@ -305,8 +305,8 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
                     {
                         if (numUnusedGValues == unusedGValuesCapacity)
                         {
-                            unusedGValues = new uint[unusedGValuesCapacity + BufSize];
                             unusedGValuesCapacity += BufSize;
+                            Array.Resize(ref unusedGValues, (int)unusedGValuesCapacity);
                         }
                         unusedGValues[numUnusedGValues++] = nextG;
                     }

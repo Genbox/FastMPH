@@ -124,7 +124,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
     {
         settings ??= new ChdMinimalSettings();
 
-        if (!TryCreate(keys, out ChdState<TKey>? phState, settings))
+        if (!TryCreate(keys, out ChdState<TKey>? phState, settings, comparer))
         {
             state = null;
             return false;
@@ -162,7 +162,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
             BucketsClean(buckets, numBuckets);
 
-            uint[] hashes = new uint[3];
+            Span<uint> hashes = stackalloc uint[3];
 
             uint i;
             for (i = 0; i < numKeys; i++)
@@ -291,7 +291,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         return PlaceBuckets1(keysPerBin, occupTable, numBins, buckets, items, maxBucketSize, sortedLists, maxProbes, dispTable);
     }
 
-    private bool PlaceBuckets1(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxBucketSize, SortedList[] sortedLists, uint maxProbes, uint[] dispTable)
+    private static bool PlaceBuckets1(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxBucketSize, SortedList[] sortedLists, uint maxProbes, uint[] dispTable)
     {
         for (uint i = maxBucketSize; i > 0; i--)
         {
@@ -511,6 +511,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         public uint ItemsList; // offset
         public uint Size;
 
+        [SuppressMessage("Minor Code Smell", "S2292:Trivial properties should be auto-implemented")]
         public uint BucketId
         {
             get => Size;
@@ -544,6 +545,12 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
     {
         public static bool IsPrimeNumber(ulong n)
         {
+            if (n < 2)
+                return false;
+
+            if (n == 2 || n == 3 || n == 5 || n == 7)
+                return true;
+
             if (n % 2 == 0)
                 return false;
             if (n % 3 == 0)

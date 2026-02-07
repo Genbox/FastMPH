@@ -35,6 +35,7 @@
     <File Path=".gitattributes" />
     <File Path=".gitignore" />
     <File Path=".globalconfig" />
+    <File Path="AGENTS.md" />
     <File Path="Imports/BannedSymbols.txt" />
     <File Path="LICENSE.txt" />
     <File Path="README.md" />

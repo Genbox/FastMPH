@@ -7,7 +7,9 @@ using Genbox.FastMPH.BMZ;
 using Genbox.FastMPH.CHD;
 using Genbox.FastMPH.CHM;
 using Genbox.FastMPH.FCH;
+using Genbox.FastMPH.Hyble;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.PTRHash;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Genbox.FastMPH.Benchmarks;
@@ -17,7 +19,7 @@ namespace Genbox.FastMPH.Benchmarks;
 [MemoryDiagnoser]
 public class IntBenchmarks
 {
-    private const int Capacity = 1_000_000;
+    private const int Capacity = 100_000;
 
     public delegate object CFunc(ReadOnlySpan<int> data);
 
@@ -43,9 +45,9 @@ public class IntBenchmarks
         _query = _data[_data.Length - 1];
     }
 
-    [Benchmark]
-    [ArgumentsSource(nameof(GetConstructImpl))]
-    public object Construct(string name, double bitsPerItem, CFunc create) => create(_data);
+    // [Benchmark]
+    // [ArgumentsSource(nameof(GetConstructImpl))]
+    // public object Construct(string name, double bitsPerItem, CFunc create) => create(_data);
 
     [Benchmark]
     [ArgumentsSource(nameof(GetQueryImpl))]
@@ -154,6 +156,12 @@ public class IntBenchmarks
 
         Validator.RequireThat(new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance).TryCreateMinimal(_data, out BbHashMinimalState<int>? bbPre));
         yield return ["BB_M", BitsPerItem(bbPre.GetPackedSize()), new CFunc(data => new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance).TryCreateMinimal(data, out _, new BbHashMinimalSettings()))];
+
+        Validator.RequireThat(new PtrHashBuilder<int>(NullLogger<PtrHashBuilder<int>>.Instance).TryCreateMinimal(_data, out PtrHashMinimalState<int>? ptrPre));
+        yield return ["PTR_M", BitsPerItem(ptrPre.GetPackedSize()), new CFunc(data => new PtrHashBuilder<int>(NullLogger<PtrHashBuilder<int>>.Instance).TryCreateMinimal(data, out _, new PtrHashMinimalSettings()))];
+
+        Validator.RequireThat(new HybleBuilder<int>(NullLogger<HybleBuilder<int>>.Instance).TryCreate(_data, out HybleState<int>? hyblePre));
+        yield return ["Hyble", BitsPerItem(hyblePre.GetPackedSize()), new CFunc(data => new HybleBuilder<int>(NullLogger<HybleBuilder<int>>.Instance).TryCreate(data, out _, new HybleSettings()))];
     }
 
     public IEnumerable<object[]> GetQueryImpl()
@@ -188,5 +196,14 @@ public class IntBenchmarks
 
         Validator.RequireThat(new FchBuilder<int>(NullLogger<FchBuilder<int>>.Instance).TryCreateMinimal(_data, out FchMinimalState<int>? fchState));
         yield return ["FCH_M", BitsPerItem(fchState.GetPackedSize()), new QFunc(data => fchState.Search(data))];
+
+        Validator.RequireThat(new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance).TryCreateMinimal(_data, out BbHashMinimalState<int>? bbState));
+        yield return ["BB_M", BitsPerItem(bbState.GetPackedSize()), new QFunc(data => bbState.Search(data))];
+
+        Validator.RequireThat(new PtrHashBuilder<int>(NullLogger<PtrHashBuilder<int>>.Instance).TryCreateMinimal(_data, out PtrHashMinimalState<int>? ptrState));
+        yield return ["PTR_M", BitsPerItem(ptrState.GetPackedSize()), new QFunc(data => ptrState.Search(data))];
+
+        Validator.RequireThat(new HybleBuilder<int>(NullLogger<HybleBuilder<int>>.Instance).TryCreate(_data, out HybleState<int>? hybleState));
+        yield return ["Hyble", BitsPerItem(hybleState.GetPackedSize()), new QFunc(data => hybleState.Search(data))];
     }
 }

@@ -99,7 +99,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
                 break;
 
             //Genbox: We don't need to check on KeysPerBin here as Array.Clear() clears the whole array from its length
-            Array2.Clear(occupTable);
+            Array.Clear(occupTable);
         }
 
         //Genbox: I moved this condition out of the while loop above.

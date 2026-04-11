@@ -5,12 +5,15 @@ using Genbox.FastMPH.BMZ;
 using Genbox.FastMPH.CHD;
 using Genbox.FastMPH.CHM;
 using Genbox.FastMPH.FCH;
+using Genbox.FastMPH.BBHash;
+using Genbox.FastMPH.Hyble;
+using Genbox.FastMPH.PTRHash;
 using Genbox.FastMPH.Tests.Misc;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Genbox.FastMPH.Tests;
 
-public class HashTests
+public class HashTests(ITestOutputHelper output)
 {
     public delegate bool HashFunc<TState>(ReadOnlySpan<byte[]> data, out TState? result);
 
@@ -36,6 +39,8 @@ public class HashTests
         uint size = state.GetPackedSize();
         Assert.True(size > 0);
 
+        output.WriteLine($"{state.GetType().Name} packed size: {size}");
+
         byte[] packed = new byte[size];
         state.Pack(packed);
 
@@ -52,12 +57,15 @@ public class HashTests
 
     public static IEnumerable<object[]> GetImpl()
     {
-        yield return [new HashFunc<BdzState<byte[]>>((ReadOnlySpan<byte[]> data, out BdzState<byte[]>? state) => new BdzBuilder<byte[]>(NullLogger<BdzBuilder<byte[]>>.Instance).TryCreate(data, out state, new BdzSettings())), (byte[] data) => BdzState<byte[]>.Unpack(data)];
-        yield return [new HashFunc<ChdState<byte[]>>((ReadOnlySpan<byte[]> data, out ChdState<byte[]>? state) => new ChdBuilder<byte[]>(NullLogger<ChdBuilder<byte[]>>.Instance).TryCreate(data, out state, new ChdSettings())), (byte[] data) => ChdState<byte[]>.Unpack(data)];
-        yield return [new HashFunc<BdzMinimalState<byte[]>>((ReadOnlySpan<byte[]> data, out BdzMinimalState<byte[]>? state) => new BdzBuilder<byte[]>(NullLogger<BdzBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new BdzMinimalSettings())), (byte[] data) => BdzMinimalState<byte[]>.Unpack(data)];
-        yield return [new HashFunc<BmzMinimalState<byte[]>>((ReadOnlySpan<byte[]> data, out BmzMinimalState<byte[]>? state) => new BmzBuilder<byte[]>(NullLogger<BmzBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new BmzMinimalSettings())), (byte[] data) => BmzMinimalState<byte[]>.Unpack(data)];
-        yield return [new HashFunc<ChdMinimalState<byte[]>>((ReadOnlySpan<byte[]> data, out ChdMinimalState<byte[]>? state) => new ChdBuilder<byte[]>(NullLogger<ChdBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new ChdMinimalSettings())), (byte[] data) => ChdMinimalState<byte[]>.Unpack(data)];
-        yield return [new HashFunc<ChmMinimalState<byte[]>>((ReadOnlySpan<byte[]> data, out ChmMinimalState<byte[]>? state) => new ChmBuilder<byte[]>(NullLogger<ChmBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new ChmMinimalSettings())), (byte[] data) => ChmMinimalState<byte[]>.Unpack(data)];
-        yield return [new HashFunc<FchMinimalState<byte[]>>((ReadOnlySpan<byte[]> data, out FchMinimalState<byte[]>? state) => new FchBuilder<byte[]>(NullLogger<FchBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new FchMinimalSettings())), (byte[] data) => FchMinimalState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<BdzState<byte[]>>((data, out state) => new BdzBuilder<byte[]>(NullLogger<BdzBuilder<byte[]>>.Instance).TryCreate(data, out state, new BdzSettings())), (byte[] data) => BdzState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<ChdState<byte[]>>((data, out state) => new ChdBuilder<byte[]>(NullLogger<ChdBuilder<byte[]>>.Instance).TryCreate(data, out state, new ChdSettings())), (byte[] data) => ChdState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<BdzMinimalState<byte[]>>((data, out state) => new BdzBuilder<byte[]>(NullLogger<BdzBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new BdzMinimalSettings())), (byte[] data) => BdzMinimalState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<BmzMinimalState<byte[]>>((data, out state) => new BmzBuilder<byte[]>(NullLogger<BmzBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new BmzMinimalSettings())), (byte[] data) => BmzMinimalState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<ChdMinimalState<byte[]>>((data, out state) => new ChdBuilder<byte[]>(NullLogger<ChdBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new ChdMinimalSettings())), (byte[] data) => ChdMinimalState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<ChmMinimalState<byte[]>>((data, out state) => new ChmBuilder<byte[]>(NullLogger<ChmBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new ChmMinimalSettings())), (byte[] data) => ChmMinimalState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<FchMinimalState<byte[]>>((data, out state) => new FchBuilder<byte[]>(NullLogger<FchBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new FchMinimalSettings())), (byte[] data) => FchMinimalState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<BbHashMinimalState<byte[]>>((data, out state) => new BbHashBuilder<byte[]>(NullLogger<BbHashBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new BbHashMinimalSettings())), (byte[] data) => BbHashMinimalState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<PtrHashMinimalState<byte[]>>((data, out state) => new PtrHashBuilder<byte[]>(NullLogger<PtrHashBuilder<byte[]>>.Instance).TryCreateMinimal(data, out state, new PtrHashMinimalSettings())), (byte[] data) => PtrHashMinimalState<byte[]>.Unpack(data)];
+        yield return [new HashFunc<HybleState<byte[]>>((data, out state) => new HybleBuilder<byte[]>(NullLogger<HybleBuilder<byte[]>>.Instance).TryCreate(data, out state, new HybleSettings())), (byte[] data) => HybleState<byte[]>.Unpack(data)];
     }
 }

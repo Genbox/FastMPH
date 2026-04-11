@@ -91,7 +91,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
             byte[] usedEdges = new byte[(numEdges / 8) + 1];
 
             //Genbox: Originally lookupTable (g) was allocated on each loop. I've moved it out and reuse it.
-            Array2.Clear(lookupTable);
+            Array.Clear(lookupTable);
 
             for (uint i = 0; i < numVertices; ++i) // critical nodes
             {

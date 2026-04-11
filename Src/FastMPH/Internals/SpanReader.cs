@@ -15,6 +15,20 @@ internal ref struct SpanReader(ReadOnlySpan<byte> span)
         return value;
     }
 
+    public ushort ReadUInt16()
+    {
+        ushort value = MemoryMarshal.Read<ushort>(_span);
+        _span = _span[sizeof(ushort)..];
+        return value;
+    }
+
+    public ulong ReadUInt64()
+    {
+        ulong value = MemoryMarshal.Read<ulong>(_span);
+        _span = _span[sizeof(ulong)..];
+        return value;
+    }
+
     public byte ReadByte()
     {
         byte value = _span[0];

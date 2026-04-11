@@ -38,18 +38,18 @@ internal static class HashHelper
         return (a, b) => Combine(comparer.GetHashCode(a), b);
     }
 
-    public static HashCode3<T> GetHashFunc3<T>(IEqualityComparer<T> comparer) where T : notnull
+    public static HashCode3<T> GetHashFunc3<T>(IEqualityComparer<T> comparer) where T : notnull => (a, b, hashes) =>
     {
-        return (a, b, hashes) =>
-        {
-            unchecked
-            {
-                hashes[0] = Combine(comparer.GetHashCode(a), b);
-                hashes[1] = Murmur_32(hashes[0]);
-                hashes[2] = Murmur_32(hashes[1]);
-            }
-        };
-    }
+        hashes[0] = Combine(comparer.GetHashCode(a), b);
+        hashes[1] = Murmur_32(hashes[0]);
+        hashes[2] = Murmur_32(hashes[1]);
+    };
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint Reduce(uint hash, uint range) => (uint)(((ulong)hash * range) >> 32);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint Reduce(ulong hash, uint range) => (uint)Math.BigMul(hash, range, out _);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint Murmur_32(uint h)

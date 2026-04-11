@@ -10,7 +10,9 @@ using Genbox.FastMPH.BMZ;
 using Genbox.FastMPH.CHD;
 using Genbox.FastMPH.CHM;
 using Genbox.FastMPH.FCH;
+using Genbox.FastMPH.Hyble;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.PTRHash;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Genbox.FastMPH.Benchmarks;
@@ -145,6 +147,9 @@ public class StringBenchmarks
 
         Validator.RequireThat(new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimal(_data, out BbHashMinimalState<string>? bbPre));
         yield return ["BB_M", BitsPerItem(bbPre.GetPackedSize()), new CFunc(data => new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimal(data, out _, new BbHashMinimalSettings()))];
+
+        Validator.RequireThat(new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreate(_data, out HybleState<string>? hyblePre));
+        yield return ["HYBLE", BitsPerItem(hyblePre.GetPackedSize()), new CFunc(data => new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreate(data, out _, new HybleSettings()))];
     }
 
     public IEnumerable<object[]> GetQueryImpl()
@@ -179,5 +184,14 @@ public class StringBenchmarks
 
         Validator.RequireThat(new FchBuilder<string>(NullLogger<FchBuilder<string>>.Instance).TryCreateMinimal(_data, out FchMinimalState<string>? state5));
         yield return ["FCH_M", BitsPerItem(state5.GetPackedSize()), new QFunc(data => state5.Search(data))];
+
+        Validator.RequireThat(new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimal(_data, out BbHashMinimalState<string>? bbState));
+        yield return ["BB_M", BitsPerItem(bbState.GetPackedSize()), new QFunc(data => bbState.Search(data))];
+
+        Validator.RequireThat(new PtrHashBuilder<string>(NullLogger<PtrHashBuilder<string>>.Instance).TryCreateMinimal(_data, out PtrHashMinimalState<string>? ptrState));
+        yield return ["PTR_M", BitsPerItem(ptrState.GetPackedSize()), new QFunc(data => ptrState.Search(data))];
+
+        Validator.RequireThat(new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreate(_data, out HybleState<string>? hybleState));
+        yield return ["HYBLE", BitsPerItem(hybleState.GetPackedSize()), new QFunc(data => hybleState.Search(data))];
     }
 }

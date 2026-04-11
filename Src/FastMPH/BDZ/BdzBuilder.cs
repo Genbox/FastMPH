@@ -237,9 +237,9 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         byte[] g = new byte[sizeG];
 
         if (minimal)
-            Array2.Fill<byte>(g, 0xff, 0, sizeG);
+            Array.Fill<byte>(g, 0xff, 0, sizeG);
 
-        Array2.Fill<byte>(markedVertices, 0, 0, (int)((numVertices >> 3) + 1));
+        Array.Fill<byte>(markedVertices, 0, 0, (int)((numVertices >> 3) + 1));
         bool isTraceEnabled = _logger.IsEnabled(LogLevel.Trace);
 
         for (uint i = numEdges - 1; i + 1 >= 1; i--)
@@ -357,7 +357,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
             Edges = new Edge[numEdges];
             VertexDegree = new byte[numVertices];
             FirstEdge = new uint[numVertices];
-            Array2.Fill<uint>(FirstEdge, 0xff);
+            Array.Fill<uint>(FirstEdge, 0xff);
         }
 
         internal void AddEdge(uint v0, uint v1, uint v2)
@@ -417,8 +417,8 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
 
         public void Clear()
         {
-            Array2.Fill<uint>(FirstEdge, 0xff);
-            Array2.Fill<byte>(VertexDegree, 0);
+            Array.Fill<uint>(FirstEdge, 0xff);
+            Array.Fill<byte>(VertexDegree, 0);
             NumEdges = 0;
         }
     }

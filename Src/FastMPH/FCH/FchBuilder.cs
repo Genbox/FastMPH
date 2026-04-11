@@ -210,7 +210,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         for (int i = 0; i < numBuckets; i++)
         {
             uint numKeys = buckets.GetSize(sortedIndexes[i]);
-            Array2.Clear(hashtable);
+            Array.Clear(hashtable);
 
             LogBucket(i, numKeys);
 

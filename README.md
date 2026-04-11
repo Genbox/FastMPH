@@ -11,11 +11,16 @@ A minimal perfect hash function library based on [CMPH](https://cmph.sourceforge
 
 Supports the following algorithms:
 
-* [BDZ](https://cmph.sourceforge.net/bdz.html) (MPH + PH)
-* [BMZ](https://cmph.sourceforge.net/bmz.html) (MPH)
-* [CHD](https://cmph.sourceforge.net/chd.html) (MPH + PH)
-* [CHM](https://cmph.sourceforge.net/chm.html) (MPH)
-* [FCH](https://cmph.sourceforge.net/fch.html) (MPH)
+| Algorithm | Has perfect | Has minimal | Author(s)                                                         | Source                                                 | Paper                                                  |
+|-----------|-------------|-------------|-------------------------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------|
+| BDZ       | Yes         | Yes         | Fabiano C. Botelho1, Rasmus Pagh, Nivio Ziviani                   | [Link](https://cmph.sourceforge.net/bdz.html)          | [Link](https://cmph.sourceforge.net/papers/wads07.pdf) |
+| BBHash    | No          | Yes         | Antoine Limasset, Guillaume Rizk, Rayan Chikhi, Pierre Peterlongo | [Link](https://github.com/rizkg/BBHash)                | [Link](https://arxiv.org/abs/1702.03154)               |
+| BMZ       | No          | Yes         | Fabiano C. Botelho, Yoshiharu Kohayakawa, and Nivio Ziviani       | [Link](https://cmph.sourceforge.net/bmz.html)          | [Link](https://cmph.sourceforge.net/papers/wea05.pdf)  |
+| CHD       | Yes         | Yes         | Djamal Belazzougui, Fabiano C. Botelho, Martin Dietzfelbinge      | [Link](https://cmph.sourceforge.net/chd.html)          | [Link](https://cmph.sourceforge.net/papers/esa09.pdf)  |
+| CHM       | No          | Yes         | Zbigniew J. Czech, George Havas, Bohdan S. Majwski                | [Link](https://cmph.sourceforge.net/chm.html)          | [Link](https://cmph.sourceforge.net/papers/chm92.pdf)  |
+| FCH       | No          | Yes         | Edward A. Fox, Qi Fan Chen, Lenwood S. Heath                      | [Link](https://cmph.sourceforge.net/fch.html)          | [Link](https://cmph.sourceforge.net/papers/fch92.pdf)  |
+| Hyble     | Yes         | No          | Alisa Sireneva                                                    | [Link](https://github.com/purplesyringa/h)             | -                                                      |
+| PtrHash   | No          | Yes         | Ragnar Groot Koerkamp                                             | [Link](https://github.com/RagnarGrootKoerkamp/ptrhash) | [Link](https://arxiv.org/abs/2502.15539)               |
 
 Other features:
 

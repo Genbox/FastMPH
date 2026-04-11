@@ -70,7 +70,7 @@ internal sealed partial class Graph
     {
         byte[] deleted = new byte[(_edgeCount / 8) + 1];
         _criticalNodes = new byte[(_nodeCount / 8) + 1];
-        Array2.Clear(_criticalNodes);
+        Array.Clear(_criticalNodes);
         _criticalNodesCount = 0;
 
         LogCriticalNodes(_nodeCount, _edgeCount);

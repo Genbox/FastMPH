@@ -14,6 +14,18 @@ internal ref struct SpanWriter(Span<byte> span)
         _span = _span[sizeof(uint)..];
     }
 
+    public void WriteUInt16(ushort value)
+    {
+        MemoryMarshal.Write(_span, ref value);
+        _span = _span[sizeof(ushort)..];
+    }
+
+    public void WriteUInt64(ulong value)
+    {
+        MemoryMarshal.Write(_span, ref value);
+        _span = _span[sizeof(ulong)..];
+    }
+
     public void WriteByte(byte value)
     {
         _span[0] = value;

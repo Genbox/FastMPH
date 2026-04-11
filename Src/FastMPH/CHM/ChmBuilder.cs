@@ -3,6 +3,7 @@ using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
 using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
+using Microsoft.Extensions.Logging;
 using static Genbox.FastMPH.Internals.BitArray;
 
 namespace Genbox.FastMPH.CHM;
@@ -20,7 +21,7 @@ namespace Genbox.FastMPH.CHM;
 public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMinimalState<TKey>, ChmMinimalSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)] out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new ChmMinimalSettings();
         comparer ??= EqualityComparer<TKey>.Default;
@@ -91,6 +92,7 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
         LogVisitingVertex(v);
 
         uint neighbor;
+        bool isTraceEnabled = _logger.IsEnabled(LogLevel.Trace);
         while ((neighbor = graph.NextNeighbor(it)) != Graph.GraphNoNeighbor)
         {
             LogVisitingNeighbor(neighbor);
@@ -98,11 +100,13 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
             if (GetBit(visited, neighbor))
                 continue;
 
-            LogVisitingEdge(v, neighbor, graph.GetEdgeId(v, neighbor));
+            uint edgeId = graph.GetEdgeId(v, neighbor);
+            LogVisitingEdge(v, neighbor, edgeId);
 
-            lookupTable[neighbor] = graph.GetEdgeId(v, neighbor) - lookupTable[v];
+            lookupTable[neighbor] = edgeId - lookupTable[v];
 
-            LogStatus(lookupTable[neighbor], graph.GetEdgeId(v, neighbor), lookupTable[v]);
+            if (isTraceEnabled)
+                LogStatus(lookupTable[neighbor], edgeId, lookupTable[v]);
 
             Traverse(graph, lookupTable, visited, neighbor);
         }

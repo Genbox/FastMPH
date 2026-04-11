@@ -5,6 +5,7 @@ using Genbox.FastMPH.Internals;
 using Genbox.FastMPH.Internals.Compat;
 using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
+using Microsoft.Extensions.Logging;
 using static Genbox.FastMPH.Internals.BitArray;
 
 namespace Genbox.FastMPH.BDZ;
@@ -22,7 +23,7 @@ namespace Genbox.FastMPH.BDZ;
 public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMinimalState<TKey>, BdzMinimalSettings>, IHashBuilder<TKey, BdzState<TKey>, BdzSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out BdzState<TKey>? state, BdzSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)] out BdzState<TKey>? state, BdzSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new BdzSettings();
         comparer ??= EqualityComparer<TKey>.Default;
@@ -46,7 +47,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
     }
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)] out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
     {
         settings ??= new BdzMinimalSettings();
         comparer ??= EqualityComparer<TKey>.Default;
@@ -64,14 +65,14 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
 
         uint indexInRank = 1U << settings.NumBitsOfKey;
         uint[] rankTable = RankingStep(lookupTable, indexInRank, (uint)Math.Ceiling(numVertices / (float)indexInRank));
-        LogRankTable(string.Join(",", rankTable));
+        LogRankTable(rankTable);
         LogSuccess(seed, numPartitions);
 
         state = new BdzMinimalState<TKey>(numPartitions, lookupTable, seed, settings.NumBitsOfKey, rankTable, hashCode);
         return true;
     }
 
-    private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, bool minimal, double loadFactor, uint iterations, out uint numPartitions, out uint numVertices, out uint seed, [NotNullWhen(true)]out byte[]? lookupTable)
+    private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, bool minimal, double loadFactor, uint iterations, out uint numPartitions, out uint numVertices, out uint seed, [NotNullWhen(true)] out byte[]? lookupTable)
     {
         uint numEdges = (uint)keys.Length;
         numPartitions = (uint)Math.Ceiling((loadFactor * numEdges) / 3);
@@ -115,7 +116,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         }
 
         lookupTable = AssigningStep(numVertices, graph, queue, minimal);
-        LogLookupTable(string.Join(",", lookupTable));
+        LogLookupTable(lookupTable);
         return true;
     }
 
@@ -239,6 +240,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
             Array2.Fill<byte>(g, 0xff, 0, sizeG);
 
         Array2.Fill<byte>(markedVertices, 0, 0, (int)((numVertices >> 3) + 1));
+        bool isTraceEnabled = _logger.IsEnabled(LogLevel.Trace);
 
         for (uint i = numEdges - 1; i + 1 >= 1; i--)
         {
@@ -247,7 +249,8 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
             uint v1 = graph.Edges[currEdge].Vertices[1];
             uint v2 = graph.Edges[currEdge].Vertices[2];
 
-            LogEntryB(v0, v1, v2, GetValue(g, v0), GetValue(g, v1), GetValue(g, v2), currEdge);
+            if (isTraceEnabled)
+                LogEntryB(v0, v1, v2, GetValue(g, v0), GetValue(g, v1), GetValue(g, v2), currEdge);
 
             if (!GetBit(markedVertices, v0))
             {
@@ -258,6 +261,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
 
                     SetBit(markedVertices, v1);
                 }
+
                 if (!GetBit(markedVertices, v2))
                 {
                     if (!minimal)
@@ -300,7 +304,8 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
                 SetBit(markedVertices, v2);
             }
 
-            LogEntryA(v0, v1, v2, GetValue(g, v0), GetValue(g, v1), GetValue(g, v2));
+            if (isTraceEnabled)
+                LogEntryA(v0, v1, v2, GetValue(g, v0), GetValue(g, v1), GetValue(g, v2));
         }
 
         return g;

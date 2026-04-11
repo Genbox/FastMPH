@@ -49,10 +49,10 @@ public partial class BdzBuilder<TKey>
     private partial void LogCreatedHyperGraph(uint numEdges, uint numVertices);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "LookupTable: {lookupTable}")]
-    private partial void LogLookupTable(string lookupTable);
+    private partial void LogLookupTable(byte[] lookupTable);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "RankTable: {rankTable}")]
-    private partial void LogRankTable(string rankTable);
+    private partial void LogRankTable(uint[] rankTable);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Trying iteration {iteration}")]
     private partial void LogIteration(uint iteration);

@@ -110,13 +110,17 @@ internal sealed partial class Graph
 
         while (true)
         {
-            LogDeletingEdge(e, _edges[AbsEdge(e, 0)], _edges[AbsEdge(e, 1)]);
+            uint edgeA = _edges[AbsEdge(e, 0)];
+            uint edgeB = _edges[AbsEdge(e, 1)];
+
+            LogDeletingEdge(e, edgeA, edgeB);
+
             SetBit(deleted, AbsEdge(e, 0));
 
-            uint v2 = _edges[AbsEdge(e, 0)];
+            uint v2 = edgeA;
 
             if (v2 == v1)
-                v2 = _edges[AbsEdge(e, 1)];
+                v2 = edgeB;
 
             LogCheckingSecondEndpoint(v2);
             degree1 = FindFirstDegreeEdge(v2, deleted, out e);
@@ -221,17 +225,21 @@ internal sealed partial class Graph
             if (e == Empty)
                 return false;
         } while (!CheckEdge(e, v1, v2));
+
         return true;
     }
 
     private bool CheckEdge(uint e, uint v1, uint v2)
     {
-        LogCheckEdge(_edges[AbsEdge(e, 0)], _edges[AbsEdge(e, 1)], v1, v2);
+        uint edgeA = _edges[AbsEdge(e, 0)];
+        uint edgeB = _edges[AbsEdge(e, 1)];
 
-        if (_edges[AbsEdge(e, 0)] == v1 && _edges[AbsEdge(e, 1)] == v2)
+        LogCheckEdge(edgeA, edgeB, v1, v2);
+
+        if (edgeA == v1 && edgeB == v2)
             return true;
 
-        if (_edges[AbsEdge(e, 0)] == v2 && _edges[AbsEdge(e, 1)] == v1)
+        if (edgeA == v2 && edgeB == v1)
             return true;
 
         return false;

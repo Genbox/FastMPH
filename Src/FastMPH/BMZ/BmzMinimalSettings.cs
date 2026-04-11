@@ -8,8 +8,6 @@ namespace Genbox.FastMPH.BMZ;
 [PublicAPI]
 public class BmzMinimalSettings : HashSettings
 {
-    private double _vertices = 1.15;
-
     /// <summary>Controls the number of mapping iterations to attempt</summary>
     public uint MappingIterations { get; set; } = 20;
 
@@ -18,11 +16,11 @@ public class BmzMinimalSettings : HashSettings
     /// </summary>
     public double Vertices
     {
-        get => _vertices;
+        get;
         set
         {
             Validator.RequireThat(value is >= 0.93 and <= 1.15);
-            _vertices = value;
+            field = value;
         }
-    }
+    } = 1.15;
 }

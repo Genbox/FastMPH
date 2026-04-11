@@ -8,18 +8,16 @@ namespace Genbox.FastMPH.CHM;
 [PublicAPI]
 public sealed class ChmMinimalSettings : HashSettings
 {
-    private double _loadFactor = 2.09;
-
     /// <summary>
     /// The load factor. Must be a value larger than 2. Default is 2.09.
     /// </summary>
     public double LoadFactor
     {
-        get => _loadFactor;
+        get;
         set
         {
             Validator.RequireThat(value > 2.0);
-            _loadFactor = value;
+            field = value;
         }
-    }
+    } = 2.09;
 }

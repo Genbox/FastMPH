@@ -8,19 +8,15 @@ namespace Genbox.FastMPH.CHD;
 [PublicAPI]
 public class ChdSettings : HashSettings
 {
-    private byte _keysPerBin = 1;
-    private byte _keysPerBucket = 4;
-    private double _loadFactor = 0.5;
-
     public double LoadFactor
     {
-        get => _loadFactor;
+        get;
         set
         {
             Validator.RequireThat(value is >= 0.5 and <= 0.99);
-            _loadFactor = value;
+            field = value;
         }
-    }
+    } = 0.5;
 
     /// <summary>
     /// Set to true to utilize heuristics
@@ -32,13 +28,13 @@ public class ChdSettings : HashSettings
     /// </summary>
     public byte KeysPerBin
     {
-        get => _keysPerBin;
+        get;
         set
         {
             Validator.RequireThat(value is >= 1 and <= 128);
-            _keysPerBin = value;
+            field = value;
         }
-    }
+    } = 1;
 
     /// <summary>
     /// Average number of keys per bucket. The larger value means slower construction.
@@ -46,11 +42,11 @@ public class ChdSettings : HashSettings
     /// </summary>
     public byte KeysPerBucket
     {
-        get => _keysPerBucket;
+        get;
         set
         {
             Validator.RequireThat(value is >= 1 and <= 32);
-            _keysPerBucket = value;
+            field = value;
         }
-    }
+    } = 4;
 }

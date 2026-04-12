@@ -125,7 +125,7 @@ It only benefits situations when:
 
 ### Benchmarks
 
-Benchmarks are sorted from fastest to slowest.
+Benchmarks are sorted from fastest to slowest. It is testing construction on 100k 32bit integers, and the query time is for just one integer.
 
 * `Dict` is the .NET Dictionary.
 * 'FrozenDict' is the .NET FrozenDictionary.

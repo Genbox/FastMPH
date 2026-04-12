@@ -5,22 +5,22 @@
 
 ### Description
 
-A minimal perfect hash function library based on [CMPH](https://cmph.sourceforge.net/).
+A library of (minimal) perfect hash functions.
 
 ### Features
 
 Supports the following algorithms:
 
-| Algorithm | Has perfect | Has minimal | Author(s)                                                         | Source                                                 | Paper                                                  |
-|-----------|-------------|-------------|-------------------------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------|
-| BDZ       | Yes         | Yes         | Fabiano C. Botelho, Rasmus Pagh, Nivio Ziviani                    | [Link](https://cmph.sourceforge.net/bdz.html)          | [Link](https://cmph.sourceforge.net/papers/wads07.pdf) |
-| BBHash    | No          | Yes         | Antoine Limasset, Guillaume Rizk, Rayan Chikhi, Pierre Peterlongo | [Link](https://github.com/rizkg/BBHash)                | [Link](https://arxiv.org/abs/1702.03154)               |
-| BMZ       | No          | Yes         | Fabiano C. Botelho, Yoshiharu Kohayakawa, Nivio Ziviani           | [Link](https://cmph.sourceforge.net/bmz.html)          | [Link](https://cmph.sourceforge.net/papers/wea05.pdf)  |
-| CHD       | Yes         | Yes         | Djamal Belazzougui, Fabiano C. Botelho, Martin Dietzfelbinge      | [Link](https://cmph.sourceforge.net/chd.html)          | [Link](https://cmph.sourceforge.net/papers/esa09.pdf)  |
-| CHM       | No          | Yes         | Zbigniew J. Czech, George Havas, Bohdan S. Majwski                | [Link](https://cmph.sourceforge.net/chm.html)          | [Link](https://cmph.sourceforge.net/papers/chm92.pdf)  |
-| FCH       | No          | Yes         | Edward A. Fox, Qi Fan Chen, Lenwood S. Heath                      | [Link](https://cmph.sourceforge.net/fch.html)          | [Link](https://cmph.sourceforge.net/papers/fch92.pdf)  |
-| Hyble     | Yes         | No          | Alisa Sireneva                                                    | [Link](https://github.com/purplesyringa/h)             | -                                                      |
-| PtrHash   | No          | Yes         | Ragnar Groot Koerkamp                                             | [Link](https://github.com/RagnarGrootKoerkamp/ptrhash) | [Link](https://arxiv.org/abs/2502.15539)               |
+| Algorithm | Supports | Author(s)                                                         | Source                                                 | Paper                                                  |
+|-----------|----------|-------------------------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------|
+| BDZ       | PH / MPH | Fabiano C. Botelho, Rasmus Pagh, Nivio Ziviani                    | [Link](https://cmph.sourceforge.net/bdz.html)          | [Link](https://cmph.sourceforge.net/papers/wads07.pdf) |
+| BBHash    | MPH      | Antoine Limasset, Guillaume Rizk, Rayan Chikhi, Pierre Peterlongo | [Link](https://github.com/rizkg/BBHash)                | [Link](https://arxiv.org/abs/1702.03154)               |
+| BMZ       | MPH      | Fabiano C. Botelho, Yoshiharu Kohayakawa, Nivio Ziviani           | [Link](https://cmph.sourceforge.net/bmz.html)          | [Link](https://cmph.sourceforge.net/papers/wea05.pdf)  |
+| CHD       | PH / MPH | Djamal Belazzougui, Fabiano C. Botelho, Martin Dietzfelbinge      | [Link](https://cmph.sourceforge.net/chd.html)          | [Link](https://cmph.sourceforge.net/papers/esa09.pdf)  |
+| CHM       | MPH      | Zbigniew J. Czech, George Havas, Bohdan S. Majwski                | [Link](https://cmph.sourceforge.net/chm.html)          | [Link](https://cmph.sourceforge.net/papers/chm92.pdf)  |
+| FCH       | MPH      | Edward A. Fox, Qi Fan Chen, Lenwood S. Heath                      | [Link](https://cmph.sourceforge.net/fch.html)          | [Link](https://cmph.sourceforge.net/papers/fch92.pdf)  |
+| Hyble     | PH       | Alisa Sireneva                                                    | [Link](https://github.com/purplesyringa/h)             | -                                                      |
+| PtrHash   | MPH      | Ragnar Groot Koerkamp                                             | [Link](https://github.com/RagnarGrootKoerkamp/ptrhash) | [Link](https://arxiv.org/abs/2502.15539)               |
 
 Other features:
 
@@ -88,7 +88,7 @@ hash("cow") % 4 = 1
 As can be seen, both "elephant" and "cow" gets the same index. That is what we call a hash collision. In a hash table/set this has to be addressed, usually done
 via [chaining or open addressing](https://en.wikipedia.org/wiki/Hash_table#Collision_resolution).
 
-A Perfect Hash is a hash function that maps a set of `n` keys to `n` unique integers with no collisions. Therefore there is no need for collision resolution.
+A Perfect Hash is a hash function that maps a set of `n` keys to `m` unique integers with no collisions. Therefore, there is no need for collision resolution.
 
 #### What is a Minimal Perfect Hash (MPH) function?
 
@@ -112,23 +112,6 @@ MPH("horse") = 0
 MPH("cow") = 2
 ```
 
-#### What are the differences compared to CMPH?
-
-All:
-
-* Moving large allocations out of loops
-* Lazy loading lookup tables to reduce memory usage
-* Some implementations had their number of iterations hardcoded. I've made them configurable.
-* Some implementations used modulus to reduce the keyspace of the seed, but the hash function don't care, so I've removed the reduction.
-
-BDZ:
-
-* It did 100 iterations with the same 16 hash functions. It now does `n` iterations with random hash functions.
-
-BMZ:
-
-* Use 2 seeds instead of 3. The third seed was never used.
-
 #### What can I use it for?
 
 This library implements several PH/MPH functions intended to be used for mapping a value to an integer.
@@ -144,27 +127,33 @@ It only benefits situations when:
 
 Benchmarks are sorted from fastest to slowest.
 
-* `Dict` is the .NET Dictionary implementation.
+* `Dict` is the .NET Dictionary.
+* 'FrozenDict' is the .NET FrozenDictionary.
 * `_M` means it is the minimal variant of the hash function.
 
-```
-| Method    | name  | Mean              | Allocated |
-|---------- |------ |------------------:|----------:|
-| Query     | Dict  |          8.708 ns |         - |
-| Query     | BMZ_M |         18.199 ns |         - |
-| Query     | BDZ   |         19.355 ns |         - |
-| Query     | CHM_M |         19.770 ns |         - |
-| Query     | FCH_M |         19.973 ns |         - |
-| Query     | CHD   |         30.335 ns |         - |
-| Query     | BDZ_M |         31.963 ns |         - |
-| Query     | CHD_M |         44.504 ns |         - |
-| Construct | Dict  |      8,638.064 ns |   31016 B |
-| Construct | CHD   |     49,194.324 ns |   39156 B |
-| Construct | CHD_M |     67,581.087 ns |   47831 B |
-| Construct | BDZ_M |    159,898.128 ns |   80575 B |
-| Construct | BDZ   |    164,998.722 ns |  250414 B |
-| Construct | BDZ_M |    165,906.307 ns |  250334 B |
-| Construct | CHM_M |    243,532.397 ns |   83903 B |
-| Construct | FCH_M | 21,347,443.750 ns | 1321044 B |
-
-```
+| Method    | Name       | BitsPerItem |                Mean |  Allocated |
+|-----------|------------|-------------|--------------------:|-----------:|
+| Query     | FrozenDict | 237.05      |           0.7450 ns |          - |
+| Query     | Hyble      | 5.24        |           1.5592 ns |          - |
+| Query     | Dict       | 173.82      |           1.5849 ns |          - |
+| Query     | BMZ_M      | 36.8        |           4.1600 ns |          - |
+| Query     | PTR_M      | 2.99        |           4.8370 ns |          - |
+| Query     | CHM_M      | 66.88       |           5.5118 ns |          - |
+| Query     | FCH_M      | 4.73        |           7.1922 ns |          - |
+| Query     | BDZ        | 1.97        |           9.6764 ns |          - |
+| Query     | BB_M       | 3.52        |          12.5208 ns |          - |
+| Query     | BDZ_M      | 2.77        |          13.1758 ns |          - |
+| Query     | CHD        | 2.98        |          20.3073 ns |          - |
+| Query     | CHD_M      | 6.24        |          47.0493 ns |          - |
+| Construct | Dict       | 173.82      |     962,823.2642 ns |  2172848 B |
+| Construct | BB_M       | 3.52        |   2,808,516.6146 ns |   612712 B |
+| Construct | FrozenDict | 237.05      |   3,350,931.3337 ns |  5936491 B |
+| Construct | CHD        | 2.99        |   4,308,704.6875 ns |  3838711 B |
+| Construct | Hyble      | 5.24        |   4,420,141.0156 ns |  1811418 B |
+| Construct | CHD_M      | 6.25        |   6,337,032.0312 ns |  4679316 B |
+| Construct | BMZ_M      | 36.8        |  16,668,686.8750 ns |  7123774 B |
+| Construct | PTR_M      | 2.99        |  21,343,941.4583 ns |  2646940 B |
+| Construct | BDZ        | 1.97        |  24,401,915.8967 ns | 13099011 B |
+| Construct | BDZ_M      | 2.77        |  25,208,954.4062 ns | 13078269 B |
+| Construct | CHM_M      | 66.88       |  27,335,151.4583 ns |  5961067 B |
+| Construct | FCH_M      | 4.73        | 470,084,043.6170 ns | 76979208 B |

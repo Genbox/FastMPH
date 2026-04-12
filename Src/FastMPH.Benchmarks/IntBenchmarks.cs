@@ -45,9 +45,9 @@ public class IntBenchmarks
         _query = _data[_data.Length - 1];
     }
 
-    // [Benchmark]
-    // [ArgumentsSource(nameof(GetConstructImpl))]
-    // public object Construct(string name, double bitsPerItem, CFunc create) => create(_data);
+    [Benchmark]
+    [ArgumentsSource(nameof(GetConstructImpl))]
+    public object Construct(string name, double bitsPerItem, CFunc create) => create(_data);
 
     [Benchmark]
     [ArgumentsSource(nameof(GetQueryImpl))]

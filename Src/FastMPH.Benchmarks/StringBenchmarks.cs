@@ -1,7 +1,5 @@
 using System.Collections.Frozen;
-using System.IO.Hashing;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using BenchmarkDotNet.Order;
 using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Benchmarks.Misc;

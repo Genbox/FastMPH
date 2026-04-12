@@ -135,11 +135,9 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BbHashMinimalState{TKey}" />.
     /// </summary>
     /// <param name="packed">The serialized hash function.</param>
-    /// <param name="comparer">The equality comparer that was used when packing the hash function.</param>
-    public static BbHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
+    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
+    public static BbHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
     {
-        comparer ??= EqualityComparer<TKey>.Default;
-
         SpanReader sr = new SpanReader(packed);
         uint numKeys = sr.ReadUInt32();
         uint seed0 = sr.ReadUInt32();
@@ -152,7 +150,7 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
         uint[] bitsetWords = ReadUInt32Array(ref sr);
         uint[] rankPrefixes = ReadUInt32Array(ref sr);
 
-        return new BbHashMinimalState<TKey>(numKeys, seed0, seed1, domains, offsets, bitsetStarts, rankStarts, bitsetWords, rankPrefixes, HashHelper.GetHashFunc(comparer));
+        return new BbHashMinimalState<TKey>(numKeys, seed0, seed1, domains, offsets, bitsetStarts, rankStarts, bitsetWords, rankPrefixes, HashHelper.GetHashFunc(hashFunc));
     }
 
     private static void WriteUInt32Array(ref SpanWriter sw, uint[] values)

@@ -23,12 +23,11 @@ namespace Genbox.FastMPH.BDZ;
 public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMinimalState<TKey>, BdzMinimalSettings>, IHashBuilder<TKey, BdzState<TKey>, BdzSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)] out BdzState<TKey>? state, BdzSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)] out BdzState<TKey>? state, BdzSettings? settings = null)
     {
         settings ??= new BdzSettings();
-        comparer ??= EqualityComparer<TKey>.Default;
 
-        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(comparer);
+        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
 
         LogCreating(keys.Length, settings.LoadFactor);
 
@@ -47,12 +46,11 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
     }
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)] out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)] out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null)
     {
         settings ??= new BdzMinimalSettings();
-        comparer ??= EqualityComparer<TKey>.Default;
 
-        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(comparer);
+        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
 
         LogCreatingMinimal(keys.Length, settings.LoadFactor, settings.NumBitsOfKey);
 

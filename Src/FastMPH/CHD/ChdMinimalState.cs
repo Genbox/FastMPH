@@ -39,10 +39,10 @@ public sealed class ChdMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="ChdMinimalState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
-    public static ChdMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
+    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
+    public static ChdMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
     {
-        ChdState<TKey> state = ChdState<TKey>.Unpack(packed, comparer);
+        ChdState<TKey> state = ChdState<TKey>.Unpack(packed, hashFunc);
         packed = packed[(int)state.GetPackedSize()..];
         CompressedRank rank = CompressedRank.Unpack(packed);
 

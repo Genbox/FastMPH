@@ -3,5 +3,6 @@
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
     <PackageVersion Include="Meziantou.Polyfill" Version="1.0.101" />
+    <PackageVersion Include="System.IO.Hashing" Version="10.0.5" />
   </ItemGroup>
 </Project>

@@ -24,12 +24,11 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
     private const uint Index = 0;
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out FchMinimalState<TKey>? state, FchMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out FchMinimalState<TKey>? state, FchMinimalSettings? settings = null)
     {
         settings ??= new FchMinimalSettings();
-        comparer ??= EqualityComparer<TKey>.Default;
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(comparer);
+        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
         uint numItems = (uint)keys.Length;
 

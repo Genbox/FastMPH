@@ -81,11 +81,9 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="FchMinimalState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
-    public static FchMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
+    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
+    public static FchMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
     {
-        comparer ??= EqualityComparer<TKey>.Default;
-
         SpanReader sr = new SpanReader(packed);
         uint numItems = sr.ReadUInt32();
         uint b = sr.ReadUInt32();
@@ -100,6 +98,6 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         for (int i = 0; i < length; i++)
             lookupTable[i] = sr.ReadUInt32();
 
-        return new FchMinimalState<TKey>(numItems, b, p1, p2, seed0, seed1, lookupTable, HashHelper.GetHashFunc(comparer));
+        return new FchMinimalState<TKey>(numItems, b, p1, p2, seed0, seed1, lookupTable, HashHelper.GetHashFunc(hashFunc));
     }
 }

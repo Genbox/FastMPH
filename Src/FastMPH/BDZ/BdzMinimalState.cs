@@ -89,11 +89,9 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BdzState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
-    public static BdzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
+    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
+    public static BdzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
     {
-        comparer ??= EqualityComparer<TKey>.Default;
-
         SpanReader sr = new SpanReader(packed);
 
         uint seed = sr.ReadUInt32();
@@ -113,7 +111,7 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         for (int i = 0; i < lookupTableLength; i++)
             lookupTable[i] = sr.ReadByte();
 
-        return new BdzMinimalState<TKey>(numPartitions, lookupTable, seed, numBitsOfKey, rankTable, HashHelper.GetHashFunc3(comparer));
+        return new BdzMinimalState<TKey>(numPartitions, lookupTable, seed, numBitsOfKey, rankTable, HashHelper.GetHashFunc3(hashFunc));
     }
 
     private static uint Rank(uint numBitsOfKey, uint[] rankTable, byte[] lookupTable, uint vertex)

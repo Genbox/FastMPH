@@ -16,9 +16,9 @@ public interface IHashBuilder<TKey, TState, in TSettings> where TKey : notnull w
     /// Create a perfect hash function.
     /// </summary>
     /// <param name="keys">The keys you want to generate the hash function for.</param>
+    /// <param name="hashFunc">The hash function for keys.</param>
     /// <param name="state">Once successful this variable contains the finished function.</param>
     /// <param name="settings">Settings for this hash function</param>
-    /// <param name="comparer">The equality comparer to use. If null, the object's own GetHashCode() will be called</param>
     /// <returns>True if the function succeeded in creating a PHF</returns>
-    bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out TState? state, TSettings? settings = null, IEqualityComparer<TKey>? comparer = null);
+    bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out TState? state, TSettings? settings = null);
 }

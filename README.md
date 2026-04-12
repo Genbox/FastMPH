@@ -40,7 +40,7 @@ string[] data =
     "cow"
 ];
 
-if (!builder.TryCreate(data, out var state))
+if (!builder.TryCreate(data, value => unchecked((uint)value.GetHashCode()), out var state))
 {
     Console.WriteLine("Unable to create perfect hash function");
     return;

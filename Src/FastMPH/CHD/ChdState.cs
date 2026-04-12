@@ -87,11 +87,9 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     /// Deserialize a serialized perfect hash function into a new instance of <see cref="ChdState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="comparer">The equality comparer that was used when packing the hash function</param>
-    public static ChdState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
+    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
+    public static ChdState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
     {
-        comparer ??= EqualityComparer<TKey>.Default;
-
         SpanReader sr = new SpanReader(packed);
         uint seed = sr.ReadUInt32();
         uint numBuckets = sr.ReadUInt32();
@@ -105,6 +103,6 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
             occupTable[i] = sr.ReadByte();
 
         CompressedSequence cs = CompressedSequence.Unpack(sr);
-        return new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, HashHelper.GetHashFunc3(comparer));
+        return new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, HashHelper.GetHashFunc3(hashFunc));
     }
 }

@@ -24,6 +24,8 @@ public class StringBenchmarks
 
     public delegate uint QFunc(string data);
 
+    private static readonly Func<string, uint> _stringHash = value => unchecked((uint)value.GetHashCode());
+
     private string[] _data = null!;
     private string _query = null!;
 
@@ -122,32 +124,32 @@ public class StringBenchmarks
             })
         ];
 
-        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreateMinimal(_data, out ChdMinimalState<string>? chdmPre));
-        yield return ["CHD_M", BitsPerItem(chdmPre.GetPackedSize()), new CFunc(data => new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreateMinimal(data, out _, new ChdMinimalSettings()))];
+        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out ChdMinimalState<string>? chdmPre));
+        yield return ["CHD_M", BitsPerItem(chdmPre.GetPackedSize()), new CFunc(data => new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreateMinimal(data, _stringHash, out _, new ChdMinimalSettings()))];
 
-        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreate(_data, out ChdState<string>? chdPre));
-        yield return ["CHD", BitsPerItem(chdPre.GetPackedSize()), new CFunc(data => new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreate(data, out _, new ChdSettings()))];
+        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreate(_data, _stringHash, out ChdState<string>? chdPre));
+        yield return ["CHD", BitsPerItem(chdPre.GetPackedSize()), new CFunc(data => new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreate(data, _stringHash, out _, new ChdSettings()))];
 
-        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreate(_data, out BdzState<string>? bdzPre));
-        yield return ["BDZ", BitsPerItem(bdzPre.GetPackedSize()), new CFunc(data => new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreate(data, out _, new BdzSettings()))];
+        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreate(_data, _stringHash, out BdzState<string>? bdzPre));
+        yield return ["BDZ", BitsPerItem(bdzPre.GetPackedSize()), new CFunc(data => new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreate(data, _stringHash, out _, new BdzSettings()))];
 
-        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreateMinimal(_data, out BdzMinimalState<string>? bdzmPre));
-        yield return ["BDZ_M", BitsPerItem(bdzmPre.GetPackedSize()), new CFunc(data => new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreateMinimal(data, out _, new BdzMinimalSettings()))];
+        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out BdzMinimalState<string>? bdzmPre));
+        yield return ["BDZ_M", BitsPerItem(bdzmPre.GetPackedSize()), new CFunc(data => new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreateMinimal(data, _stringHash, out _, new BdzMinimalSettings()))];
 
-        Validator.RequireThat(new BmzBuilder<string>(NullLogger<BmzBuilder<string>>.Instance).TryCreateMinimal(_data, out BmzMinimalState<string>? bmzPre));
-        yield return ["BMZ_M", BitsPerItem(bmzPre.GetPackedSize()), new CFunc(data => new BmzBuilder<string>(NullLogger<BmzBuilder<string>>.Instance).TryCreateMinimal(data, out _, new BmzMinimalSettings()))];
+        Validator.RequireThat(new BmzBuilder<string>(NullLogger<BmzBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out BmzMinimalState<string>? bmzPre));
+        yield return ["BMZ_M", BitsPerItem(bmzPre.GetPackedSize()), new CFunc(data => new BmzBuilder<string>(NullLogger<BmzBuilder<string>>.Instance).TryCreateMinimal(data, _stringHash, out _, new BmzMinimalSettings()))];
 
-        Validator.RequireThat(new ChmBuilder<string>(NullLogger<ChmBuilder<string>>.Instance).TryCreateMinimal(_data, out ChmMinimalState<string>? chmPre));
-        yield return ["CHM_M", BitsPerItem(chmPre.GetPackedSize()), new CFunc(data => new ChmBuilder<string>(NullLogger<ChmBuilder<string>>.Instance).TryCreateMinimal(data, out _, new ChmMinimalSettings()))];
+        Validator.RequireThat(new ChmBuilder<string>(NullLogger<ChmBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out ChmMinimalState<string>? chmPre));
+        yield return ["CHM_M", BitsPerItem(chmPre.GetPackedSize()), new CFunc(data => new ChmBuilder<string>(NullLogger<ChmBuilder<string>>.Instance).TryCreateMinimal(data, _stringHash, out _, new ChmMinimalSettings()))];
 
-        Validator.RequireThat(new FchBuilder<string>(NullLogger<FchBuilder<string>>.Instance).TryCreateMinimal(_data, out FchMinimalState<string>? fchPre));
-        yield return ["FCH_M", BitsPerItem(fchPre.GetPackedSize()), new CFunc(data => new FchBuilder<string>(NullLogger<FchBuilder<string>>.Instance).TryCreateMinimal(data, out _, new FchMinimalSettings()))];
+        Validator.RequireThat(new FchBuilder<string>(NullLogger<FchBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out FchMinimalState<string>? fchPre));
+        yield return ["FCH_M", BitsPerItem(fchPre.GetPackedSize()), new CFunc(data => new FchBuilder<string>(NullLogger<FchBuilder<string>>.Instance).TryCreateMinimal(data, _stringHash, out _, new FchMinimalSettings()))];
 
-        Validator.RequireThat(new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimal(_data, out BbHashMinimalState<string>? bbPre));
-        yield return ["BB_M", BitsPerItem(bbPre.GetPackedSize()), new CFunc(data => new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimal(data, out _, new BbHashMinimalSettings()))];
+        Validator.RequireThat(new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out BbHashMinimalState<string>? bbPre));
+        yield return ["BB_M", BitsPerItem(bbPre.GetPackedSize()), new CFunc(data => new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimal(data, _stringHash, out _, new BbHashMinimalSettings()))];
 
-        Validator.RequireThat(new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreate(_data, out HybleState<string>? hyblePre));
-        yield return ["HYBLE", BitsPerItem(hyblePre.GetPackedSize()), new CFunc(data => new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreate(data, out _, new HybleSettings()))];
+        Validator.RequireThat(new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreate(_data, _stringHash, out HybleState<string>? hyblePre));
+        yield return ["HYBLE", BitsPerItem(hyblePre.GetPackedSize()), new CFunc(data => new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreate(data, _stringHash, out _, new HybleSettings()))];
     }
 
     public IEnumerable<object[]> GetQueryImpl()
@@ -162,34 +164,34 @@ public class StringBenchmarks
         FrozenDictionary<string, uint> frozenDict = lookup.ToFrozenDictionary();
         yield return ["FrozenDict", BitsPerItem(FrozenDictStateBytes(frozenDict)), new QFunc(data => frozenDict.GetValueOrDefault(data, 0u))];
 
-        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreateMinimal(_data, out ChdMinimalState<string>? state6));
+        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out ChdMinimalState<string>? state6));
         yield return ["CHD_M", BitsPerItem(state6.GetPackedSize()), new QFunc(data => state6.Search(data))];
 
-        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreate(_data, out ChdState<string>? state7));
+        Validator.RequireThat(new ChdBuilder<string>(NullLogger<ChdBuilder<string>>.Instance).TryCreate(_data, _stringHash, out ChdState<string>? state7));
         yield return ["CHD", BitsPerItem(state7.GetPackedSize()), new QFunc(data => state7.Search(data))];
 
-        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreate(_data, out BdzState<string>? state1));
+        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreate(_data, _stringHash, out BdzState<string>? state1));
         yield return ["BDZ", BitsPerItem(state1.GetPackedSize()), new QFunc(data => state1.Search(data))];
 
-        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreateMinimal(_data, out BdzMinimalState<string>? state2));
+        Validator.RequireThat(new BdzBuilder<string>(NullLogger<BdzBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out BdzMinimalState<string>? state2));
         yield return ["BDZ_M", BitsPerItem(state2.GetPackedSize()), new QFunc(data => state2.Search(data))];
 
-        Validator.RequireThat(new BmzBuilder<string>(NullLogger<BmzBuilder<string>>.Instance).TryCreateMinimal(_data, out BmzMinimalState<string>? state3));
+        Validator.RequireThat(new BmzBuilder<string>(NullLogger<BmzBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out BmzMinimalState<string>? state3));
         yield return ["BMZ_M", BitsPerItem(state3.GetPackedSize()), new QFunc(data => state3.Search(data))];
 
-        Validator.RequireThat(new ChmBuilder<string>(NullLogger<ChmBuilder<string>>.Instance).TryCreateMinimal(_data, out ChmMinimalState<string>? state4));
+        Validator.RequireThat(new ChmBuilder<string>(NullLogger<ChmBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out ChmMinimalState<string>? state4));
         yield return ["CHM_M", BitsPerItem(state4.GetPackedSize()), new QFunc(data => state4.Search(data))];
 
-        Validator.RequireThat(new FchBuilder<string>(NullLogger<FchBuilder<string>>.Instance).TryCreateMinimal(_data, out FchMinimalState<string>? state5));
+        Validator.RequireThat(new FchBuilder<string>(NullLogger<FchBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out FchMinimalState<string>? state5));
         yield return ["FCH_M", BitsPerItem(state5.GetPackedSize()), new QFunc(data => state5.Search(data))];
 
-        Validator.RequireThat(new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimal(_data, out BbHashMinimalState<string>? bbState));
+        Validator.RequireThat(new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out BbHashMinimalState<string>? bbState));
         yield return ["BB_M", BitsPerItem(bbState.GetPackedSize()), new QFunc(data => bbState.Search(data))];
 
-        Validator.RequireThat(new PtrHashBuilder<string>(NullLogger<PtrHashBuilder<string>>.Instance).TryCreateMinimal(_data, out PtrHashMinimalState<string>? ptrState));
+        Validator.RequireThat(new PtrHashBuilder<string>(NullLogger<PtrHashBuilder<string>>.Instance).TryCreateMinimal(_data, _stringHash, out PtrHashMinimalState<string>? ptrState));
         yield return ["PTR_M", BitsPerItem(ptrState.GetPackedSize()), new QFunc(data => ptrState.Search(data))];
 
-        Validator.RequireThat(new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreate(_data, out HybleState<string>? hybleState));
+        Validator.RequireThat(new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreate(_data, _stringHash, out HybleState<string>? hybleState));
         yield return ["HYBLE", BitsPerItem(hybleState.GetPackedSize()), new QFunc(data => hybleState.Search(data))];
     }
 }

@@ -5,13 +5,16 @@ namespace Genbox.FastMPH.Tests;
 
 public class HybleTests
 {
+    private static readonly Func<int, uint> _intHash = value => unchecked((uint)value.GetHashCode());
+    private static readonly Func<string, uint> _ordinalIgnoreCaseHash = value => unchecked((uint)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
+
     [Fact]
     public void BuildsPerfectHashForIntegers()
     {
         int[] values = Enumerable.Range(0, 5000).Select(i => (i * 53) + 19).ToArray();
         HybleBuilder<int> builder = new HybleBuilder<int>(NullLogger<HybleBuilder<int>>.Instance);
 
-        Assert.True(builder.TryCreate(values, out HybleState<int>? state));
+        Assert.True(builder.TryCreate(values, _intHash, out HybleState<int>? state));
         Assert.NotNull(state);
 
         HashSet<uint> seen = new HashSet<uint>();
@@ -26,13 +29,13 @@ public class HybleTests
         int[] values = Enumerable.Range(0, 4000).Select(i => (i * 97) + 31).ToArray();
         HybleBuilder<int> builder = new HybleBuilder<int>(NullLogger<HybleBuilder<int>>.Instance);
 
-        Assert.True(builder.TryCreate(values, out HybleState<int>? state));
+        Assert.True(builder.TryCreate(values, _intHash, out HybleState<int>? state));
         Assert.NotNull(state);
 
         byte[] packed = new byte[state.GetPackedSize()];
         state.Pack(packed);
 
-        HybleState<int> unpacked = HybleState<int>.Unpack(packed);
+        HybleState<int> unpacked = HybleState<int>.Unpack(packed, _intHash);
 
         Assert.Equal(state.ApproxRange, unpacked.ApproxRange);
         Assert.Equal(state.Displacements, unpacked.Displacements);
@@ -43,12 +46,12 @@ public class HybleTests
     }
 
     [Fact]
-    public void SupportsCustomComparerForLookup()
+    public void SupportsCustomHashForLookup()
     {
         string[] values = ["one", "two", "three", "four"];
         HybleBuilder<string> builder = new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance);
 
-        Assert.True(builder.TryCreate(values, out HybleState<string>? state, comparer: StringComparer.OrdinalIgnoreCase));
+        Assert.True(builder.TryCreate(values, _ordinalIgnoreCaseHash, out HybleState<string>? state));
         Assert.NotNull(state);
 
         Assert.Equal(state.Search("one"), state.Search("ONE"));
@@ -62,7 +65,7 @@ public class HybleTests
     {
         HybleBuilder<int> builder = new HybleBuilder<int>(NullLogger<HybleBuilder<int>>.Instance);
 
-        Assert.True(builder.TryCreate(Array.Empty<int>(), out HybleState<int>? state));
+        Assert.True(builder.TryCreate(Array.Empty<int>(), _intHash, out HybleState<int>? state));
         Assert.NotNull(state);
 
         Assert.Equal(1u, state.ApproxRange);

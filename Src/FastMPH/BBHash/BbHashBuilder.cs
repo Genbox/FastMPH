@@ -17,9 +17,9 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
     private const int RankSampleWords = RankSampleBits / 32;
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out BbHashMinimalState<TKey>? state, BbHashMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out BbHashMinimalState<TKey>? state, BbHashMinimalSettings? settings = null)
     {
-        BbHashBuildStatus status = CreateMinimalWithRemainder(keys, out BbHashBuildResult<TKey>? result, settings, comparer);
+        BbHashBuildStatus status = CreateMinimalWithRemainder(keys, hashFunc, out BbHashBuildResult<TKey>? result, settings);
 
         if (status == BbHashBuildStatus.Success)
         {
@@ -35,16 +35,15 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
     /// Create a minimal perfect hash function and return any remaining keys.
     /// </summary>
     /// <param name="keys">The keys you want to generate the hash function for.</param>
+    /// <param name="hashFunc">The hash function for keys.</param>
     /// <param name="settings">Settings for this hash function.</param>
-    /// <param name="comparer">The equality comparer to use. If null, the object's own GetHashCode() will be called.</param>
     /// <param name="result">Contains the constructed state and any remaining keys. Null on failure.</param>
     /// <returns>Success if all keys are mapped; Partial if some remain; Failure for invalid inputs.</returns>
-    public BbHashBuildStatus CreateMinimalWithRemainder(ReadOnlySpan<TKey> keys, out BbHashBuildResult<TKey>? result, BbHashMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public BbHashBuildStatus CreateMinimalWithRemainder(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, out BbHashBuildResult<TKey>? result, BbHashMinimalSettings? settings = null)
     {
         settings ??= new BbHashMinimalSettings();
-        comparer ??= EqualityComparer<TKey>.Default;
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(comparer);
+        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
         LogCreating(keys.Length, settings.Gamma, settings.MaxLevels);
 
@@ -135,7 +134,7 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
             domainFloat *= collisionProbability;
         }
 
-        Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>(remainingCount, comparer);
+        Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>(remainingCount);
 
         for (int i = 0; i < remainingCount; i++)
             remainder[keys[remaining[i]]] = offset + (uint)i;

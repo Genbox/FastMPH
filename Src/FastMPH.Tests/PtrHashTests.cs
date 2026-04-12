@@ -7,6 +7,8 @@ public class PtrHashTests
 {
     private static readonly int[] _randomSizes = [0, 1, 2, 3, 10, 30, 100, 300, 1_000, 3_000, 10_000];
     private static readonly int[] _multipleSizes = [0, 1, 2, 10, 100, 300, 1_000, 3_000];
+    private static readonly Func<ulong, uint> _strongUlongHash = value => unchecked((uint)Mix64(value));
+    private static readonly Func<string, uint> _ordinalIgnoreCaseHash = value => unchecked((uint)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
 
     [Theory]
     [InlineData(PtrHashBucketFunction.Linear)]
@@ -21,7 +23,7 @@ public class PtrHashTests
             ulong[] keys = GeneratePseudoRandomKeys(size);
             PtrHashMinimalSettings settings = CreateSettings(bucketFunction);
 
-            Assert.True(builder.TryCreateMinimal(keys, out PtrHashMinimalState<ulong>? state, settings, StrongUlongComparer.Instance));
+            Assert.True(builder.TryCreateMinimal(keys, _strongUlongHash, out PtrHashMinimalState<ulong>? state, settings));
             Assert.NotNull(state);
 
             Assert.Equal((uint)size, state.NumKeys);
@@ -48,7 +50,7 @@ public class PtrHashTests
                     keys[i] = unchecked(multiplier * (ulong)i);
 
                 PtrHashMinimalSettings settings = CreateSettings(PtrHashBucketFunction.Linear);
-                Assert.True(builder.TryCreateMinimal(keys, out PtrHashMinimalState<ulong>? state, settings, StrongUlongComparer.Instance));
+                Assert.True(builder.TryCreateMinimal(keys, _strongUlongHash, out PtrHashMinimalState<ulong>? state, settings));
                 Assert.NotNull(state);
 
                 AssertMinimalPerfect(keys, state);
@@ -63,13 +65,13 @@ public class PtrHashTests
         PtrHashBuilder<ulong> builder = new PtrHashBuilder<ulong>(NullLogger<PtrHashBuilder<ulong>>.Instance);
         PtrHashMinimalSettings settings = CreateSettings(PtrHashBucketFunction.Linear);
 
-        Assert.True(builder.TryCreateMinimal(keys, out PtrHashMinimalState<ulong>? state, settings, StrongUlongComparer.Instance));
+        Assert.True(builder.TryCreateMinimal(keys, _strongUlongHash, out PtrHashMinimalState<ulong>? state, settings));
         Assert.NotNull(state);
 
         byte[] packed = new byte[state.GetPackedSize()];
         state.Pack(packed);
 
-        PtrHashMinimalState<ulong> unpacked = PtrHashMinimalState<ulong>.Unpack(packed, StrongUlongComparer.Instance);
+        PtrHashMinimalState<ulong> unpacked = PtrHashMinimalState<ulong>.Unpack(packed, _strongUlongHash);
 
         Assert.Equal(state.NumKeys, unpacked.NumKeys);
         Assert.Equal(state.NumSlots, unpacked.NumSlots);
@@ -97,12 +99,12 @@ public class PtrHashTests
     }
 
     [Fact]
-    public void StringComparerSupport()
+    public void StringHashSupport()
     {
         string[] keys = ["alpha", "beta", "gamma", "delta"];
         PtrHashBuilder<string> builder = new PtrHashBuilder<string>(NullLogger<PtrHashBuilder<string>>.Instance);
 
-        Assert.True(builder.TryCreateMinimal(keys, out PtrHashMinimalState<string>? state, CreateSettings(PtrHashBucketFunction.Linear), StringComparer.OrdinalIgnoreCase));
+        Assert.True(builder.TryCreateMinimal(keys, _ordinalIgnoreCaseHash, out PtrHashMinimalState<string>? state, CreateSettings(PtrHashBucketFunction.Linear)));
         Assert.NotNull(state);
 
         Assert.Equal(state.Search("alpha"), state.Search("ALPHA"));
@@ -116,7 +118,7 @@ public class PtrHashTests
         T[] keys = [value];
         PtrHashBuilder<T> builder = new PtrHashBuilder<T>(NullLogger<PtrHashBuilder<T>>.Instance);
 
-        Assert.True(builder.TryCreateMinimal(keys, out PtrHashMinimalState<T>? state, CreateSettings(PtrHashBucketFunction.Linear)));
+        Assert.True(builder.TryCreateMinimal(keys, GetDefaultHash<T>(), out PtrHashMinimalState<T>? state, CreateSettings(PtrHashBucketFunction.Linear)));
         Assert.NotNull(state);
         Assert.Equal(0u, state.Search(value));
     }
@@ -185,12 +187,5 @@ public class PtrHashTests
         return result;
     }
 
-    private sealed class StrongUlongComparer : IEqualityComparer<ulong>
-    {
-        public static StrongUlongComparer Instance { get; } = new StrongUlongComparer();
-
-        public bool Equals(ulong x, ulong y) => x == y;
-
-        public int GetHashCode(ulong obj) => unchecked((int)Mix64(obj));
-    }
+    private static Func<T, uint> GetDefaultHash<T>() where T : notnull => value => unchecked((uint)value.GetHashCode());
 }

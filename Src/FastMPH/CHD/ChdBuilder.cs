@@ -23,12 +23,11 @@ namespace Genbox.FastMPH.CHD;
 public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMinimalState<TKey>, ChdMinimalSettings>, IHashBuilder<TKey, ChdState<TKey>, ChdSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out ChdState<TKey>? state, ChdSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out ChdState<TKey>? state, ChdSettings? settings = null)
     {
         settings ??= new ChdSettings();
-        comparer ??= EqualityComparer<TKey>.Default;
 
-        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(comparer);
+        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
 
         uint numKeys = (uint)keys.Length;
         uint numBuckets = (numKeys / settings.KeysPerBucket) + 1;
@@ -119,11 +118,11 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
     }
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out ChdMinimalState<TKey>? state, ChdMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out ChdMinimalState<TKey>? state, ChdMinimalSettings? settings = null)
     {
         settings ??= new ChdMinimalSettings();
 
-        if (!TryCreate(keys, out ChdState<TKey>? phState, settings, comparer))
+        if (!TryCreate(keys, hashFunc, out ChdState<TKey>? phState, settings))
         {
             state = null;
             return false;

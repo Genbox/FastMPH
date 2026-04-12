@@ -82,11 +82,9 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     /// Deserialize a serialized perfect hash function into a new instance of <see cref="HybleState{TKey}" />.
     /// </summary>
     /// <param name="packed">The serialized hash function.</param>
-    /// <param name="comparer">The equality comparer that was used when packing the hash function.</param>
-    public static HybleState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
+    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
+    public static HybleState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
     {
-        comparer ??= EqualityComparer<TKey>.Default;
-
         SpanReader sr = new SpanReader(packed);
         uint approxRange = sr.ReadUInt32();
         uint seed = sr.ReadUInt32();
@@ -99,7 +97,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
         if (!IsValidState(displacements))
             throw new InvalidOperationException("Packed Hyble state invariants are invalid");
 
-        return new HybleState<TKey>(approxRange, seed, displacements, HashHelper.GetHashFunc(comparer));
+        return new HybleState<TKey>(approxRange, seed, displacements, HashHelper.GetHashFunc(hashFunc));
     }
 
     private static bool IsValidState(ushort[] displacements)

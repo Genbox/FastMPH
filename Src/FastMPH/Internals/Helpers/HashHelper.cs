@@ -9,19 +9,16 @@ internal static class HashHelper
     private const uint Prime4 = 668265263U;
     private const uint Prime5 = 374761393U;
 
-    private static uint Combine<T1, T2>(T1 value1, T2 value2) where T1 : notnull where T2 : notnull
+    private static uint Combine(uint value1, uint value2)
     {
         unchecked
         {
-            uint hc1 = (uint)value1.GetHashCode();
-            uint hc2 = (uint)value2.GetHashCode();
-
             uint hash = 42 + Prime5;
 
-            uint value = hash + (hc1 * Prime3);
+            uint value = hash + (value1 * Prime3);
             hash = ((value << 17) | (value >> (32 - 17))) * Prime4;
 
-            uint value3 = hash + (hc2 * Prime3);
+            uint value3 = hash + (value2 * Prime3);
             hash = ((value3 << 17) | (value3 >> (32 - 17))) * Prime4;
 
             hash ^= hash >> 15;
@@ -33,14 +30,14 @@ internal static class HashHelper
         }
     }
 
-    public static HashCode<T> GetHashFunc<T>(IEqualityComparer<T> comparer) where T : notnull
+    public static HashCode<T> GetHashFunc<T>(Func<T, uint> hashFunc) where T : notnull
     {
-        return (a, b) => Combine(comparer.GetHashCode(a), b);
+        return (a, b) => Combine(hashFunc(a), b);
     }
 
-    public static HashCode3<T> GetHashFunc3<T>(IEqualityComparer<T> comparer) where T : notnull => (a, b, hashes) =>
+    public static HashCode3<T> GetHashFunc3<T>(Func<T, uint> hashFunc) where T : notnull => (a, b, hashes) =>
     {
-        hashes[0] = Combine(comparer.GetHashCode(a), b);
+        hashes[0] = Combine(hashFunc(a), b);
         hashes[1] = Murmur_32(hashes[0]);
         hashes[2] = Murmur_32(hashes[1]);
     };

@@ -147,13 +147,11 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="PtrHashMinimalState{TKey}" />.
     /// </summary>
     /// <param name="packed">The serialized hash function.</param>
-    /// <param name="comparer">The equality comparer that was used when packing the hash function.</param>
-    public static PtrHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, IEqualityComparer<TKey>? comparer = null)
+    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
+    public static PtrHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
     {
-        comparer ??= EqualityComparer<TKey>.Default;
-
         if (TryUnpackCurrent(packed, out uint numKeys, out uint numSlots, out uint numParts, out uint slotsPerPart, out uint bucketsPerPart, out PtrHashBucketFunction bucketFunction, out uint seed, out byte[] pilots, out uint[] remap))
-            return new PtrHashMinimalState<TKey>(numKeys, numSlots, numParts, slotsPerPart, bucketsPerPart, bucketFunction, seed, pilots, remap, HashHelper.GetHashFunc(comparer));
+            return new PtrHashMinimalState<TKey>(numKeys, numSlots, numParts, slotsPerPart, bucketsPerPart, bucketFunction, seed, pilots, remap, HashHelper.GetHashFunc(hashFunc));
 
         throw new InvalidOperationException("Invalid packed PTRHash state format");
     }

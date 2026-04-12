@@ -19,12 +19,11 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
     private const uint MaxDisplacementBase = ushort.MaxValue - 64;
 
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, [NotNullWhen(true)]out HybleState<TKey>? state, HybleSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out HybleState<TKey>? state, HybleSettings? settings = null)
     {
         settings ??= new HybleSettings();
-        comparer ??= EqualityComparer<TKey>.Default;
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(comparer);
+        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
         state = null;
 

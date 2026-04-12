@@ -21,12 +21,11 @@ namespace Genbox.FastMPH.CHM;
 public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMinimalState<TKey>, ChmMinimalSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)] out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)] out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null)
     {
         settings ??= new ChmMinimalSettings();
-        comparer ??= EqualityComparer<TKey>.Default;
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(comparer);
+        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
         LogCreating(keys.Length, settings.LoadFactor);
 

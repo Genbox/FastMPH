@@ -13,12 +13,11 @@ namespace Genbox.FastMPH.PTRHash;
 public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, PtrHashMinimalState<TKey>, PtrHashMinimalSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, [NotNullWhen(true)] out PtrHashMinimalState<TKey>? state, PtrHashMinimalSettings? settings = null, IEqualityComparer<TKey>? comparer = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)] out PtrHashMinimalState<TKey>? state, PtrHashMinimalSettings? settings = null)
     {
         settings ??= new PtrHashMinimalSettings();
-        comparer ??= EqualityComparer<TKey>.Default;
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(comparer);
+        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
         LogCreating(keys.Length, settings.Alpha, settings.Lambda);
 

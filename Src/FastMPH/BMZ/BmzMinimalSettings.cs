@@ -8,9 +8,6 @@ namespace Genbox.FastMPH.BMZ;
 [PublicAPI]
 public class BmzMinimalSettings : HashSettings
 {
-    /// <summary>Controls the number of mapping iterations to attempt</summary>
-    public uint MappingIterations { get; set; } = 20;
-
     /// <summary>
     /// The number of vertices to use for the graph. More vertices means a larger function. It must be in the range 0.93 and 1.15. Default is 1.15
     /// </summary>

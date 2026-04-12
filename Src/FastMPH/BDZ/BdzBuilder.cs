@@ -23,15 +23,21 @@ namespace Genbox.FastMPH.BDZ;
 public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMinimalState<TKey>, BdzMinimalSettings>, IHashBuilder<TKey, BdzState<TKey>, BdzSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)] out BdzState<TKey>? state, BdzSettings? settings = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out BdzState<TKey>? state, BdzSettings? settings = null)
     {
         settings ??= new BdzSettings();
 
         HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
+        BdzBuildState buildState = new BdzBuildState();
 
+        return TryCreateCore(keys, hashCode, settings, seed, buildState, out state);
+    }
+
+    private bool TryCreateCore(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, BdzSettings settings, ulong seed, BdzBuildState buildState, [NotNullWhen(true)]out BdzState<TKey>? state)
+    {
         LogCreating(keys.Length, settings.LoadFactor);
 
-        if (!TryCreate(keys, hashCode, false, settings.LoadFactor, settings.Iterations, out uint numPartitions, out uint numVertices, out uint seed, out byte[]? lookupTable))
+        if (!TryCreate(keys, hashCode, false, settings.LoadFactor, seed, buildState, out uint numPartitions, out uint numVertices, out byte[]? lookupTable))
         {
             LogFailed();
             state = null;
@@ -46,15 +52,21 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
     }
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)] out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null)
     {
         settings ??= new BdzMinimalSettings();
 
         HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
+        BdzBuildState buildState = new BdzBuildState();
 
+        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
+    }
+
+    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, BdzMinimalSettings settings, ulong seed, BdzBuildState buildState, [NotNullWhen(true)]out BdzMinimalState<TKey>? state)
+    {
         LogCreatingMinimal(keys.Length, settings.LoadFactor, settings.NumBitsOfKey);
 
-        if (!TryCreate(keys, hashCode, true, settings.LoadFactor, settings.Iterations, out uint numPartitions, out uint numVertices, out uint seed, out byte[]? lookupTable))
+        if (!TryCreate(keys, hashCode, true, settings.LoadFactor, seed, buildState, out uint numPartitions, out uint numVertices, out byte[]? lookupTable))
         {
             LogFailed();
             state = null;
@@ -70,7 +82,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         return true;
     }
 
-    private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, bool minimal, double loadFactor, uint iterations, out uint numPartitions, out uint numVertices, out uint seed, [NotNullWhen(true)] out byte[]? lookupTable)
+    private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, bool minimal, double loadFactor, ulong seed, BdzBuildState buildState, out uint numPartitions, out uint numVertices, [NotNullWhen(true)]out byte[]? lookupTable)
     {
         uint numEdges = (uint)keys.Length;
         numPartitions = (uint)Math.Ceiling((loadFactor * numEdges) / 3);
@@ -84,36 +96,23 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
 
         numVertices = 3 * numPartitions;
 
-        Graph graph = new Graph(numEdges, numVertices);
-        uint[] queue = new uint[numEdges];
+        buildState.EnsureForGraph(numEdges, numVertices);
+        buildState.EnsureForEdges(numEdges);
+        buildState.EnsureForVertices(numVertices);
+
+        Graph graph = buildState.Graph;
+        uint[] queue = buildState.Queue;
 
         LogCreatedHyperGraph(numEdges, numVertices);
 
-        //Genbox: The original code seems to do 100 iterations but with the same 16 hash functions.
-        //        I've implemented what I believe it should be instead.
-
-        seed = 0;
-
-        for (; iterations > 0; iterations--)
-        {
-            LogIteration(iterations);
-
-            //Genbox: The original code used modulus to reduce the keyspace of the seed. However, I don't see any reason to do
-            //        that, as the hash function works the same no matter the key space.
-            seed = RandomHelper.Next();
-
-            if (MappingStep(keys, seed, numPartitions, numEdges, graph, queue, hashCode))
-                break;
-        }
-
-        if (iterations == 0)
+        if (!MappingStep(keys, seed, numPartitions, numEdges, graph, queue, buildState.MarkedEdge, hashCode))
         {
             LogFailed();
             lookupTable = null;
             return false;
         }
 
-        lookupTable = AssigningStep(numVertices, graph, queue, minimal);
+        lookupTable = AssigningStep(numVertices, graph, queue, minimal, buildState.MarkedVertices, buildState.LookupTable);
         LogLookupTable(lookupTable);
         return true;
     }
@@ -133,11 +132,11 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         return newLookup;
     }
 
-    private int GenerateQueue(uint numEdges, uint[] queue, Graph graph)
+    private int GenerateQueue(uint numEdges, uint[] queue, byte[] markedEdge, Graph graph)
     {
         uint v0, v1, v2;
         uint queueHead = 0, queueTail = 0;
-        byte[] markedEdge = new byte[(numEdges >> 3) + 1];
+        Array.Clear(markedEdge, 0, (int)((numEdges >> 3) + 1));
 
         for (uint i = 0; i < numEdges; i++)
         {
@@ -202,7 +201,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         return (int)queueHead - (int)numEdges; /* returns 0 if successful otherwise return negative number*/
     }
 
-    private bool MappingStep(ReadOnlySpan<TKey> keys, uint seed, uint numPartitions, uint numEdges, Graph graph, uint[] queue, HashCode3<TKey> hashCode)
+    private bool MappingStep(ReadOnlySpan<TKey> keys, ulong seed, uint numPartitions, uint numEdges, Graph graph, uint[] queue, byte[] markedEdge, HashCode3<TKey> hashCode)
     {
         LogMappingStep(keys.Length, seed, numPartitions, numEdges);
 
@@ -222,20 +221,21 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
             graph.AddEdge(hashes[0], hashes[1], hashes[2]);
         }
 
-        return GenerateQueue(numEdges, queue, graph) == 0;
+        return GenerateQueue(numEdges, queue, markedEdge, graph) == 0;
     }
 
-    private byte[] AssigningStep(uint numVertices, Graph graph, uint[] queue, bool minimal)
+    private byte[] AssigningStep(uint numVertices, Graph graph, uint[] queue, bool minimal, byte[] markedVertices, byte[] lookupTable)
     {
         LogAssigningStep(queue.Length, numVertices);
 
         uint numEdges = graph.NumEdges;
-        byte[] markedVertices = new byte[(numVertices >> 3) + 1];
-        int sizeG = (int)Math.Ceiling(numVertices / 4.0);
-        byte[] g = new byte[sizeG];
+        byte[] g = lookupTable;
+        int lookupLength = (int)Math.Ceiling(numVertices / 4.0);
 
         if (minimal)
-            Array.Fill<byte>(g, 0xff, 0, sizeG);
+            Array.Fill<byte>(g, 0xff, 0, lookupLength);
+        else
+            Array.Clear(g, 0, lookupLength);
 
         Array.Fill<byte>(markedVertices, 0, 0, (int)((numVertices >> 3) + 1));
         bool isTraceEnabled = _logger.IsEnabled(LogLevel.Trace);
@@ -335,6 +335,44 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         return rankTable;
     }
 
+    private sealed class BdzBuildState
+    {
+        public Graph? Graph;
+        public uint[] Queue = [];
+        public byte[] MarkedEdge = [];
+        public byte[] MarkedVertices = [];
+        public byte[] LookupTable = [];
+        private uint _numEdges;
+        private uint _numVertices;
+
+        public void EnsureForGraph(uint numEdges, uint numVertices)
+        {
+            if (Graph == null || _numEdges != numEdges || _numVertices != numVertices)
+            {
+                Graph = new Graph(numEdges, numVertices);
+                _numEdges = numEdges;
+                _numVertices = numVertices;
+            }
+        }
+
+        public void EnsureForEdges(uint numEdges)
+        {
+            ArrayEnsure.EnsureCapacity(ref Queue, (int)numEdges);
+
+            int markedEdgeLength = (int)((numEdges >> 3) + 1);
+            ArrayEnsure.EnsureCapacity(ref MarkedEdge, markedEdgeLength);
+        }
+
+        public void EnsureForVertices(uint numVertices)
+        {
+            int markedVerticesLength = (int)((numVertices >> 3) + 1);
+            ArrayEnsure.EnsureCapacity(ref MarkedVertices, markedVerticesLength);
+
+            int lookupLength = (int)Math.Ceiling(numVertices / 4.0);
+            ArrayEnsure.EnsureCapacity(ref LookupTable, lookupLength);
+        }
+    }
+
     private sealed class Edge
     {
         public readonly uint[] NextEdges = new uint[3];
@@ -360,7 +398,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
 
         internal void AddEdge(uint v0, uint v1, uint v2)
         {
-            Edge edge = new Edge();
+            Edge edge = Edges[NumEdges] ?? new Edge();
             edge.Vertices[0] = v0;
             edge.Vertices[1] = v1;
             edge.Vertices[2] = v2;

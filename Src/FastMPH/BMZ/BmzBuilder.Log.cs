@@ -12,9 +12,6 @@ public partial class BmzBuilder<TKey>
     [LoggerMessage(Level = LogLevel.Debug, Message = "Creating BMZ with {numKeys} keys. Vertices = {vertices}")]
     private partial void LogCreating(int numKeys, double vertices);
 
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Trying iteration {iteration}")]
-    private partial void LogIteration(uint iteration);
-
     [LoggerMessage(Level = LogLevel.Trace, Message = "Starting ordering step")]
     private partial void LogStartOrdering();
 
@@ -23,9 +20,6 @@ public partial class BmzBuilder<TKey>
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Traversing non critical vertices")]
     private partial void LogTraversingNonCriticalVertices();
-
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Restarting mapping step. {mapIterations} iterations remaining")]
-    private partial void LogRestartMappingStep(uint mapIterations);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Visiting neighbor {neighbor}")]
     private partial void LogVisitingNeighbor(uint neighbor);

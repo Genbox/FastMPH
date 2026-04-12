@@ -4,14 +4,15 @@ namespace Genbox.FastMPH.BBHash;
 
 internal static class BbHashHelper
 {
-    public static uint GetLevelHash<TKey>(TKey key, uint level, uint seed0, uint seed1, HashCode<TKey> hashCode)
+    public static uint GetLevelHash<TKey>(TKey key, uint level, ulong seed, HashCode<TKey> hashCode)
     {
-        uint h0 = hashCode(key, seed0);
+        ulong h = hashCode(key, seed);
+        uint h0 = (uint)h;
 
         if (level == 0)
             return h0;
 
-        uint h1 = hashCode(key, seed1);
+        uint h1 = (uint)(h >> 32);
 
         if (level == 1)
             return h1;

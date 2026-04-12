@@ -11,14 +11,13 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
 {
     private readonly HashCode<TKey> _hashCode;
 
-    internal ChmMinimalState(uint numVertices, uint numEdges, uint[] lookupTable, uint seed0, uint seed1, HashCode<TKey> hashCode)
+    internal ChmMinimalState(uint numVertices, uint numEdges, uint[] lookupTable, ulong seed, HashCode<TKey> hashCode)
     {
         _hashCode = hashCode;
         NumVertices = numVertices;
         NumEdges = numEdges;
         LookupTable = lookupTable;
-        Seed0 = seed0;
-        Seed1 = seed1;
+        Seed = seed;
     }
 
     /// <summary>The number of vertices in the graph</summary>
@@ -27,11 +26,8 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <summary>The number of edges in the graph</summary>
     public uint NumEdges { get; }
 
-    /// <summary>The seed used in the first hash function</summary>
-    public uint Seed0 { get; }
-
-    /// <summary>The seed used in the second hash function</summary>
-    public uint Seed1 { get; }
+    /// <summary>The seed used in the hash function</summary>
+    public ulong Seed { get; }
 
     /// <summary>The lookup table</summary>
     public uint[] LookupTable { get; }
@@ -39,8 +35,9 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint h1 = _hashCode(key, Seed0) % NumVertices;
-        uint h2 = _hashCode(key, Seed1) % NumVertices;
+        ulong h = _hashCode(key, Seed);
+        uint h1 = (uint)h % NumVertices;
+        uint h2 = (uint)(h >> 32) % NumVertices;
 
         if (h1 == h2 && ++h2 >= NumVertices)
             h2 = 0;
@@ -51,8 +48,7 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint GetPackedSize() => sizeof(uint) + //NumVertices
                                    sizeof(uint) + //NumEdges
-                                   sizeof(uint) + //Seed0
-                                   sizeof(uint) + //Seed1
+                                   sizeof(ulong) + //Seed
                                    sizeof(uint) + //Length of lookupTable
                                    (sizeof(uint) * (uint)LookupTable.Length); //lookupTable
 
@@ -62,8 +58,7 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(NumVertices);
         sw.WriteUInt32(NumEdges);
-        sw.WriteUInt32(Seed0);
-        sw.WriteUInt32(Seed1);
+        sw.WriteUInt64(Seed);
         sw.WriteUInt32((uint)LookupTable.Length);
 
         foreach (uint t in LookupTable)
@@ -75,13 +70,12 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static ChmMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static ChmMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
         SpanReader sw = new SpanReader(packed);
         uint numVertices = sw.ReadUInt32();
         uint numEdges = sw.ReadUInt32();
-        uint seed0 = sw.ReadUInt32();
-        uint seed1 = sw.ReadUInt32();
+        ulong seed = sw.ReadUInt64();
         uint length = sw.ReadUInt32();
 
         uint[] lookupTable = new uint[length];
@@ -89,6 +83,6 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         for (int i = 0; i < length; i++)
             lookupTable[i] = sw.ReadUInt32();
 
-        return new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed0, seed1, HashHelper.GetHashFunc(hashFunc));
+        return new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed, HashHelper.GetHashFunc(hashFunc));
     }
 }

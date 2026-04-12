@@ -11,7 +11,7 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
 {
     private readonly HashCode<TKey> _hashCode;
 
-    internal FchMinimalState(uint numItems, uint b, double p1, double p2, uint seed0, uint seed1, uint[] lookupTable, HashCode<TKey> hashCode)
+    internal FchMinimalState(uint numItems, uint b, double p1, double p2, ulong seed0, ulong seed1, uint[] lookupTable, HashCode<TKey> hashCode)
     {
         _hashCode = hashCode;
         NumItems = numItems;
@@ -23,20 +23,17 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         Seed1 = seed1;
     }
 
-    /// <summary>
-    /// The number of items in the hash function
-    /// </summary>
+    /// <summary>The number of items in the hash function</summary>
     public uint NumItems { get; }
-
     public uint B { get; }
     public double P1 { get; }
     public double P2 { get; }
 
-    /// <summary>The seed for the first hash function</summary>
-    public uint Seed0 { get; }
+    /// <summary>The mapping seed</summary>
+    public ulong Seed0 { get; }
 
-    /// <summary>The seed for the second hash function</summary>
-    public uint Seed1 { get; }
+    /// <summary>The search seed</summary>
+    public ulong Seed1 { get; }
 
     /// <summary>The lookup table</summary>
     public uint[] LookupTable { get; }
@@ -44,9 +41,8 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint h1 = _hashCode(key, Seed0) % NumItems;
-        uint h2 = _hashCode(key, Seed1) % NumItems;
-
+        uint h1 = (uint)_hashCode(key, Seed0) % NumItems;
+        uint h2 = (uint)_hashCode(key, Seed1) % NumItems;
         h1 = FchBuilder<TKey>.Mixh10h11h12(B, P1, P2, h1);
         return (h2 + LookupTable[h1]) % NumItems;
     }
@@ -56,8 +52,8 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
                                    sizeof(uint) + //B
                                    sizeof(double) + //P1
                                    sizeof(double) + //P2
-                                   sizeof(uint) + //Seed1
-                                   sizeof(uint) + //Seed2
+                                   sizeof(ulong) + //Seed0
+                                   sizeof(ulong) + //Seed1
                                    sizeof(uint) + //LookupTable length
                                    (sizeof(uint) * (uint)LookupTable.Length); //LookupTable
 
@@ -69,8 +65,8 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         sw.WriteUInt32(B);
         sw.WriteDouble(P1);
         sw.WriteDouble(P2);
-        sw.WriteUInt32(Seed0);
-        sw.WriteUInt32(Seed1);
+        sw.WriteUInt64(Seed0);
+        sw.WriteUInt64(Seed1);
         sw.WriteUInt32((uint)LookupTable.Length);
 
         foreach (uint t in LookupTable)
@@ -82,15 +78,15 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static FchMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static FchMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
         uint numItems = sr.ReadUInt32();
         uint b = sr.ReadUInt32();
         double p1 = sr.ReadDouble();
         double p2 = sr.ReadDouble();
-        uint seed0 = sr.ReadUInt32();
-        uint seed1 = sr.ReadUInt32();
+        ulong seed0 = sr.ReadUInt64();
+        ulong seed1 = sr.ReadUInt64();
         uint length = sr.ReadUInt32();
 
         uint[] lookupTable = new uint[length];

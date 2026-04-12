@@ -19,12 +19,19 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
     private const uint MaxDisplacementBase = ushort.MaxValue - 64;
 
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out HybleState<TKey>? state, HybleSettings? settings = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out HybleState<TKey>? state, HybleSettings? settings = null)
     {
         settings ??= new HybleSettings();
 
         HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
+        HybleBuildState buildState = new HybleBuildState();
+
+        return TryCreateCore(keys, hashCode, settings, seed, buildState, out state);
+    }
+
+    private bool TryCreateCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, HybleSettings settings, ulong seed, HybleBuildState buildState, [NotNullWhen(true)]out HybleState<TKey>? state)
+    {
         state = null;
 
         // Keep the 32-bit data limitation explicit to match the Rust implementation.
@@ -47,97 +54,90 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
 
         LogCreating(numKeys, approxRange, bucketCount);
 
-        uint[] approxs = new uint[numKeys];
-        int[] bucketsByKey = new int[numKeys];
-        int[] bucketCounts = new int[bucketCount];
-        int[] bucketStarts = new int[bucketCount + 1];
-        int[] bucketOffsets = new int[bucketCount];
-        int[] bucketKeyIndices = new int[numKeys];
-        int[] bucketOrder = new int[bucketCount];
-        ushort[] displacements = new ushort[bucketCount];
-
         ulong bitmapBits = approxRange + (ulong)ushort.MaxValue;
         int bitmapByteLength = (int)((bitmapBits + 7) / 8);
-        byte[] freeBitmap = new byte[bitmapByteLength];
+        buildState.EnsureForKeys((int)numKeys);
+        buildState.EnsureForBuckets((int)bucketCount);
+        buildState.EnsureForBitmap(bitmapByteLength);
 
-        for (uint attempt = 0; attempt < settings.Iterations; attempt++)
+        uint[] approxs = buildState.Approxs;
+        int[] bucketsByKey = buildState.BucketsByKey;
+        int[] bucketCounts = buildState.BucketCounts;
+        int[] bucketStarts = buildState.BucketStarts;
+        int[] bucketOffsets = buildState.BucketOffsets;
+        int[] bucketKeyIndices = buildState.BucketKeyIndices;
+        int[] bucketOrder = buildState.BucketOrder;
+        ushort[] displacements = buildState.Displacements;
+        byte[] freeBitmap = buildState.FreeBitmap;
+
+        Array.Clear(bucketCounts, 0, bucketCounts.Length);
+
+        for (int i = 0; i < numKeys; i++)
         {
-            uint seed = RandomHelper.Next();
-            LogAttempt(attempt + 1, seed);
-
-            Array.Clear(bucketCounts, 0, bucketCounts.Length);
-
-            for (int i = 0; i < numKeys; i++)
-            {
-                uint hash = hashCode(keys[i], seed);
-                (uint approx, int bucket) = ToApproxBucket(hash, approxRange, bucketMask);
-                approxs[i] = approx;
-                bucketsByKey[i] = bucket;
-                bucketCounts[bucket]++;
-            }
-
-            bucketStarts[0] = 0;
-
-            for (int i = 0; i < bucketCount; i++)
-            {
-                bucketStarts[i + 1] = bucketStarts[i] + bucketCounts[i];
-                bucketOffsets[i] = bucketStarts[i];
-                bucketOrder[i] = i;
-            }
-
-            for (int i = 0; i < numKeys; i++)
-            {
-                int bucket = bucketsByKey[i];
-                int offset = bucketOffsets[bucket]++;
-                bucketKeyIndices[offset] = i;
-            }
-
-            if (HasApproxCollision(bucketStarts, bucketCounts, bucketKeyIndices, approxs))
-                continue;
-
-            Array.Sort(bucketOrder, (a, b) =>
-            {
-                int sizeCompare = bucketCounts[b].CompareTo(bucketCounts[a]);
-                return sizeCompare != 0 ? sizeCompare : a.CompareTo(b);
-            });
-
-            Array.Clear(displacements, 0, displacements.Length);
-            for (int i = 0; i < freeBitmap.Length; i++)
-                freeBitmap[i] = byte.MaxValue;
-
-            bool failed = false;
-
-            for (int order = 0; order < bucketOrder.Length; order++)
-            {
-                int bucket = bucketOrder[order];
-                int size = bucketCounts[bucket];
-
-                if (size == 0)
-                    continue;
-
-                if (!TryFindDisplacement(bucket, bucketStarts, bucketCounts, bucketKeyIndices, approxs, freeBitmap, settings.DisplacementSearchStride, out ushort displacement))
-                {
-                    LogBucketFailure(bucket, size);
-                    failed = true;
-                    break;
-                }
-
-                displacements[bucket] = displacement;
-                MarkBucketAsUsed(bucket, bucketStarts, bucketCounts, bucketKeyIndices, approxs, displacement, freeBitmap);
-            }
-
-            if (failed)
-                continue;
-
-            uint capacity = GetCapacity(approxRange, displacements);
-            state = new HybleState<TKey>(approxRange, seed, displacements, hashCode);
-            LogSuccess(seed, capacity);
-            return true;
+            ulong hash = hashCode(keys[i], seed);
+            (uint approx, int bucket) = ToApproxBucket(hash, approxRange, bucketMask);
+            approxs[i] = approx;
+            bucketsByKey[i] = bucket;
+            bucketCounts[bucket]++;
         }
 
-        LogFailure();
-        state = null;
-        return false;
+        bucketStarts[0] = 0;
+
+        for (int i = 0; i < bucketCount; i++)
+        {
+            bucketStarts[i + 1] = bucketStarts[i] + bucketCounts[i];
+            bucketOffsets[i] = bucketStarts[i];
+            bucketOrder[i] = i;
+        }
+
+        for (int i = 0; i < numKeys; i++)
+        {
+            int bucket = bucketsByKey[i];
+            int offset = bucketOffsets[bucket]++;
+            bucketKeyIndices[offset] = i;
+        }
+
+        if (HasApproxCollision(bucketStarts, bucketCounts, bucketKeyIndices, approxs))
+        {
+            LogFailure();
+            state = null;
+            return false;
+        }
+
+        Array.Sort(bucketOrder, (a, b) =>
+        {
+            int sizeCompare = bucketCounts[b].CompareTo(bucketCounts[a]);
+            return sizeCompare != 0 ? sizeCompare : a.CompareTo(b);
+        });
+
+        Array.Clear(displacements, 0, displacements.Length);
+        for (int i = 0; i < freeBitmap.Length; i++)
+            freeBitmap[i] = byte.MaxValue;
+
+        for (int order = 0; order < bucketOrder.Length; order++)
+        {
+            int bucket = bucketOrder[order];
+            int size = bucketCounts[bucket];
+
+            if (size == 0)
+                continue;
+
+            if (!TryFindDisplacement(bucket, bucketStarts, bucketCounts, bucketKeyIndices, approxs, freeBitmap, settings.DisplacementSearchStride, out ushort displacement))
+            {
+                LogBucketFailure(bucket, size);
+                LogFailure();
+                state = null;
+                return false;
+            }
+
+            displacements[bucket] = displacement;
+            MarkBucketAsUsed(bucket, bucketStarts, bucketCounts, bucketKeyIndices, approxs, displacement, freeBitmap);
+        }
+
+        uint capacity = GetCapacity(approxRange, displacements);
+        state = new HybleState<TKey>(approxRange, seed, displacements, hashCode);
+        LogSuccess(seed, capacity);
+        return true;
     }
 
     private static uint GetCapacity(uint approxRange, ushort[] displacements)
@@ -218,9 +218,9 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
         }
     }
 
-    private static (uint approx, int bucket) ToApproxBucket(uint hash, uint approxRange, uint bucketMask)
+    private static (uint approx, int bucket) ToApproxBucket(ulong hash, uint approxRange, uint bucketMask)
     {
-        uint approx = HashHelper.Reduce(hash, approxRange);
+        uint approx = HashHelper.Reduce64(hash, approxRange);
         int bucket = (int)(hash & bucketMask);
         return (approx, bucket);
     }
@@ -281,4 +281,38 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
     }
 
     private static uint DivCeil(uint a, uint b) => (a + b - 1) / b;
+
+    private sealed class HybleBuildState
+    {
+        public uint[] Approxs = [];
+        public int[] BucketsByKey = [];
+        public int[] BucketCounts = [];
+        public int[] BucketStarts = [];
+        public int[] BucketOffsets = [];
+        public int[] BucketKeyIndices = [];
+        public int[] BucketOrder = [];
+        public ushort[] Displacements = [];
+        public byte[] FreeBitmap = [];
+
+        public void EnsureForKeys(int numKeys)
+        {
+            ArrayEnsure.EnsureCapacity(ref Approxs, numKeys);
+            ArrayEnsure.EnsureCapacity(ref BucketsByKey, numKeys);
+            ArrayEnsure.EnsureCapacity(ref BucketKeyIndices, numKeys);
+        }
+
+        public void EnsureForBuckets(int bucketCount)
+        {
+            ArrayEnsure.EnsureCapacity(ref BucketCounts, bucketCount);
+            ArrayEnsure.EnsureCapacity(ref BucketStarts, bucketCount + 1);
+            ArrayEnsure.EnsureCapacity(ref BucketOffsets, bucketCount);
+            ArrayEnsure.EnsureCapacity(ref BucketOrder, bucketCount);
+            ArrayEnsure.EnsureCapacity(ref Displacements, bucketCount);
+        }
+
+        public void EnsureForBitmap(int bitmapByteLength)
+        {
+            ArrayEnsure.EnsureCapacity(ref FreeBitmap, bitmapByteLength);
+        }
+    }
 }

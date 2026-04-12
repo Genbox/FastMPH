@@ -5,8 +5,8 @@ namespace Genbox.FastMPH.Tests;
 
 public class HybleTests
 {
-    private static readonly Func<int, uint> _intHash = value => unchecked((uint)value.GetHashCode());
-    private static readonly Func<string, uint> _ordinalIgnoreCaseHash = value => unchecked((uint)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
+    private static readonly Func<int, ulong> _intHash = value => unchecked((ulong)value);
+    private static readonly Func<string, ulong> _ordinalIgnoreCaseHash = value => unchecked((ulong)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
 
     [Fact]
     public void BuildsPerfectHashForIntegers()
@@ -14,7 +14,7 @@ public class HybleTests
         int[] values = Enumerable.Range(0, 5000).Select(i => (i * 53) + 19).ToArray();
         HybleBuilder<int> builder = new HybleBuilder<int>(NullLogger<HybleBuilder<int>>.Instance);
 
-        Assert.True(builder.TryCreate(values, _intHash, out HybleState<int>? state));
+        Assert.True(builder.TryCreateWithRetry(values, _intHash, out HybleState<int>? state));
         Assert.NotNull(state);
 
         HashSet<uint> seen = new HashSet<uint>();
@@ -29,7 +29,7 @@ public class HybleTests
         int[] values = Enumerable.Range(0, 4000).Select(i => (i * 97) + 31).ToArray();
         HybleBuilder<int> builder = new HybleBuilder<int>(NullLogger<HybleBuilder<int>>.Instance);
 
-        Assert.True(builder.TryCreate(values, _intHash, out HybleState<int>? state));
+        Assert.True(builder.TryCreateWithRetry(values, _intHash, out HybleState<int>? state));
         Assert.NotNull(state);
 
         byte[] packed = new byte[state.GetPackedSize()];
@@ -51,7 +51,7 @@ public class HybleTests
         string[] values = ["one", "two", "three", "four"];
         HybleBuilder<string> builder = new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance);
 
-        Assert.True(builder.TryCreate(values, _ordinalIgnoreCaseHash, out HybleState<string>? state));
+        Assert.True(builder.TryCreateWithRetry(values, _ordinalIgnoreCaseHash, out HybleState<string>? state));
         Assert.NotNull(state);
 
         Assert.Equal(state.Search("one"), state.Search("ONE"));
@@ -65,7 +65,7 @@ public class HybleTests
     {
         HybleBuilder<int> builder = new HybleBuilder<int>(NullLogger<HybleBuilder<int>>.Instance);
 
-        Assert.True(builder.TryCreate(Array.Empty<int>(), _intHash, out HybleState<int>? state));
+        Assert.True(builder.TryCreateWithRetry(Array.Empty<int>(), _intHash, out HybleState<int>? state));
         Assert.NotNull(state);
 
         Assert.Equal(1u, state.ApproxRange);

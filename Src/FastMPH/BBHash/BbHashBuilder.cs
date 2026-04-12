@@ -17,9 +17,9 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
     private const int RankSampleWords = RankSampleBits / 32;
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out BbHashMinimalState<TKey>? state, BbHashMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out BbHashMinimalState<TKey>? state, BbHashMinimalSettings? settings = null)
     {
-        BbHashBuildStatus status = CreateMinimalWithRemainder(keys, hashFunc, out BbHashBuildResult<TKey>? result, settings);
+        BbHashBuildStatus status = CreateMinimalWithRemainder(keys, hashFunc, seed, out BbHashBuildResult<TKey>? result, settings);
 
         if (status == BbHashBuildStatus.Success)
         {
@@ -39,18 +39,23 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
     /// <param name="settings">Settings for this hash function.</param>
     /// <param name="result">Contains the constructed state and any remaining keys. Null on failure.</param>
     /// <returns>Success if all keys are mapped; Partial if some remain; Failure for invalid inputs.</returns>
-    public BbHashBuildStatus CreateMinimalWithRemainder(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, out BbHashBuildResult<TKey>? result, BbHashMinimalSettings? settings = null)
+    public BbHashBuildStatus CreateMinimalWithRemainder(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out BbHashBuildResult<TKey>? result, BbHashMinimalSettings? settings = null)
     {
         settings ??= new BbHashMinimalSettings();
 
         HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
+        BbHashBuildState buildState = new BbHashBuildState();
+
+        return CreateMinimalWithRemainderCore(keys, hashCode, settings, seed, buildState, out result);
+    }
+
+    private BbHashBuildStatus CreateMinimalWithRemainderCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, BbHashMinimalSettings settings, ulong seed, BbHashBuildState buildState, out BbHashBuildResult<TKey>? result)
+    {
         LogCreating(keys.Length, settings.Gamma, settings.MaxLevels);
 
-        uint seed0 = settings.Seed0;
-        uint seed1 = settings.Seed1;
-
-        int[] remaining = new int[keys.Length];
+        buildState.EnsureForRemaining(keys.Length);
+        int[] remaining = buildState.Remaining;
 
         for (int i = 0; i < keys.Length; i++)
             remaining[i] = i;
@@ -80,15 +85,18 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
             uint domain = RoundToBlock((uint)domainFloat);
             int wordCount = (int)((domain + 31) / 32);
 
-            uint[] seen = new uint[wordCount];
-            uint[] collisions = new uint[wordCount];
+            buildState.EnsureForWords(wordCount);
+            uint[] seen = buildState.Seen;
+            uint[] collisions = buildState.Collisions;
+            Array.Clear(seen, 0, wordCount);
+            Array.Clear(collisions, 0, wordCount);
 
             LogLevelStart(level, remainingCount, domain);
 
             for (int i = 0; i < remainingCount; i++)
             {
                 int keyIndex = remaining[i];
-                uint pos = HashHelper.Reduce(BbHashHelper.GetLevelHash(keys[keyIndex], level, seed0, seed1, hashCode), domain);
+                uint pos = HashHelper.Reduce(BbHashHelper.GetLevelHash(keys[keyIndex], level, seed, hashCode), domain);
 
                 int word = (int)(pos >> 5);
                 uint mask = 1u << (int)(pos & 31);
@@ -107,7 +115,7 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
             for (int i = 0; i < remainingCount; i++)
             {
                 int keyIndex = remaining[i];
-                uint pos = HashHelper.Reduce(BbHashHelper.GetLevelHash(keys[keyIndex], level, seed0, seed1, hashCode), domain);
+                uint pos = HashHelper.Reduce(BbHashHelper.GetLevelHash(keys[keyIndex], level, seed, hashCode), domain);
 
                 int word = (int)(pos >> 5);
                 uint mask = 1u << (int)(pos & 31);
@@ -146,8 +154,7 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
 
         BbHashMinimalState<TKey> state = new BbHashMinimalState<TKey>(
             numKeys: (uint)keys.Length,
-            seed0: seed0,
-            seed1: seed1,
+            seed: seed,
             domains: domains.ToArray(),
             offsets: offsets.ToArray(),
             bitsetStarts: bitsetStarts.ToArray(),
@@ -158,6 +165,24 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
 
         result = new BbHashBuildResult<TKey>(state, remainder);
         return remainder.Count == 0 ? BbHashBuildStatus.Success : BbHashBuildStatus.Partial;
+    }
+
+    private sealed class BbHashBuildState
+    {
+        public int[] Remaining = [];
+        public uint[] Seen = [];
+        public uint[] Collisions = [];
+
+        public void EnsureForRemaining(int count)
+        {
+            ArrayEnsure.EnsureCapacity(ref Remaining, count);
+        }
+
+        public void EnsureForWords(int count)
+        {
+            ArrayEnsure.EnsureCapacity(ref Seen, count);
+            ArrayEnsure.EnsureCapacity(ref Collisions, count);
+        }
     }
 
     private static bool TryComputeInitialDomain(int numKeys, double gamma, out double domainFloat)

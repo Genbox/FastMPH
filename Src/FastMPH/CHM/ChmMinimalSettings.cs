@@ -1,5 +1,6 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.CHM;

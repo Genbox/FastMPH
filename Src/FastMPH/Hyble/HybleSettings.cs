@@ -6,7 +6,6 @@ namespace Genbox.FastMPH.Hyble;
 
 /// <summary>
 /// Settings for the Hyble perfect hash function.
-///
 /// Hyble assumes full-avalanche key hashes and uses a 32-bit seeded hash pipeline.
 /// </summary>
 [PublicAPI]

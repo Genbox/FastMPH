@@ -7,8 +7,8 @@ public class PtrHashTests
 {
     private static readonly int[] _randomSizes = [0, 1, 2, 3, 10, 30, 100, 300, 1_000, 3_000, 10_000];
     private static readonly int[] _multipleSizes = [0, 1, 2, 10, 100, 300, 1_000, 3_000];
-    private static readonly Func<ulong, uint> _strongUlongHash = value => unchecked((uint)Mix64(value));
-    private static readonly Func<string, uint> _ordinalIgnoreCaseHash = value => unchecked((uint)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
+    private static readonly Func<ulong, ulong> _strongUlongHash = Mix64;
+    private static readonly Func<string, ulong> _ordinalIgnoreCaseHash = value => unchecked((ulong)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
 
     [Theory]
     [InlineData(PtrHashBucketFunction.Linear)]
@@ -23,7 +23,7 @@ public class PtrHashTests
             ulong[] keys = GeneratePseudoRandomKeys(size);
             PtrHashMinimalSettings settings = CreateSettings(bucketFunction);
 
-            Assert.True(builder.TryCreateMinimal(keys, _strongUlongHash, out PtrHashMinimalState<ulong>? state, settings));
+            Assert.True(builder.TryCreateMinimalWithRetry(keys, _strongUlongHash, out PtrHashMinimalState<ulong>? state, settings));
             Assert.NotNull(state);
 
             Assert.Equal((uint)size, state.NumKeys);
@@ -50,7 +50,7 @@ public class PtrHashTests
                     keys[i] = unchecked(multiplier * (ulong)i);
 
                 PtrHashMinimalSettings settings = CreateSettings(PtrHashBucketFunction.Linear);
-                Assert.True(builder.TryCreateMinimal(keys, _strongUlongHash, out PtrHashMinimalState<ulong>? state, settings));
+                Assert.True(builder.TryCreateMinimalWithRetry(keys, _strongUlongHash, out PtrHashMinimalState<ulong>? state, settings));
                 Assert.NotNull(state);
 
                 AssertMinimalPerfect(keys, state);
@@ -65,7 +65,7 @@ public class PtrHashTests
         PtrHashBuilder<ulong> builder = new PtrHashBuilder<ulong>(NullLogger<PtrHashBuilder<ulong>>.Instance);
         PtrHashMinimalSettings settings = CreateSettings(PtrHashBucketFunction.Linear);
 
-        Assert.True(builder.TryCreateMinimal(keys, _strongUlongHash, out PtrHashMinimalState<ulong>? state, settings));
+        Assert.True(builder.TryCreateMinimalWithRetry(keys, _strongUlongHash, out PtrHashMinimalState<ulong>? state, settings));
         Assert.NotNull(state);
 
         byte[] packed = new byte[state.GetPackedSize()];
@@ -104,7 +104,7 @@ public class PtrHashTests
         string[] keys = ["alpha", "beta", "gamma", "delta"];
         PtrHashBuilder<string> builder = new PtrHashBuilder<string>(NullLogger<PtrHashBuilder<string>>.Instance);
 
-        Assert.True(builder.TryCreateMinimal(keys, _ordinalIgnoreCaseHash, out PtrHashMinimalState<string>? state, CreateSettings(PtrHashBucketFunction.Linear)));
+        Assert.True(builder.TryCreateMinimalWithRetry(keys, _ordinalIgnoreCaseHash, out PtrHashMinimalState<string>? state, CreateSettings(PtrHashBucketFunction.Linear)));
         Assert.NotNull(state);
 
         Assert.Equal(state.Search("alpha"), state.Search("ALPHA"));
@@ -118,7 +118,7 @@ public class PtrHashTests
         T[] keys = [value];
         PtrHashBuilder<T> builder = new PtrHashBuilder<T>(NullLogger<PtrHashBuilder<T>>.Instance);
 
-        Assert.True(builder.TryCreateMinimal(keys, GetDefaultHash<T>(), out PtrHashMinimalState<T>? state, CreateSettings(PtrHashBucketFunction.Linear)));
+        Assert.True(builder.TryCreateMinimalWithRetry(keys, GetDefaultHash<T>(), out PtrHashMinimalState<T>? state, CreateSettings(PtrHashBucketFunction.Linear)));
         Assert.NotNull(state);
         Assert.Equal(0u, state.Search(value));
     }
@@ -147,7 +147,6 @@ public class PtrHashTests
         {
             Alpha = 0.99,
             Lambda = bucketFunction == PtrHashBucketFunction.Linear ? 3.0 : 3.5,
-            Iterations = 80,
             BucketFunction = bucketFunction,
             EnableEviction = true,
             Parts = 0,
@@ -187,5 +186,5 @@ public class PtrHashTests
         return result;
     }
 
-    private static Func<T, uint> GetDefaultHash<T>() where T : notnull => value => unchecked((uint)value.GetHashCode());
+    private static Func<T, ulong> GetDefaultHash<T>() where T : notnull => value => unchecked((ulong)value.GetHashCode());
 }

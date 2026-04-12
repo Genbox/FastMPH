@@ -5,6 +5,7 @@ using Genbox.FastMPH.Internals;
 using Genbox.FastMPH.Internals.Compat;
 using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
+using Microsoft.Extensions.Logging;
 using static Genbox.FastMPH.Internals.BitArray;
 
 namespace Genbox.FastMPH.BMZ;
@@ -24,12 +25,19 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
     private const uint BufSize = 1024 * 64;
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out BmzMinimalState<TKey>? state, BmzMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out BmzMinimalState<TKey>? state, BmzMinimalSettings? settings = null)
     {
         settings ??= new BmzMinimalSettings();
 
         HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
+        BmzBuildState buildState = new BmzBuildState();
+
+        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
+    }
+
+    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, BmzMinimalSettings settings, ulong seed, BmzBuildState buildState, [NotNullWhen(true)]out BmzMinimalState<TKey>? state)
+    {
         LogCreating(keys.Length, settings.Vertices);
 
         uint numEdges = (uint)keys.Length;
@@ -38,88 +46,61 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
         if (numVertices < 5) // workaround for small key sets
             numVertices = 5;
 
-        //Genbox: The original implementation created space for 3 seeds, but only ever used two.
-        uint seed0 = 0;
-        uint seed1 = 0;
+        buildState.EnsureForGraph(_logger, numVertices, numEdges);
+        Graph graph = buildState.Graph;
+        buildState.EnsureForVertices((int)numVertices);
+        buildState.EnsureForEdges((int)numEdges);
+        uint[] lookupTable = buildState.LookupTable;
 
-        //Genbox: This was hardcoded to 20. I've moved it into settings and have it default to 20.
-        uint iterationsMap = settings.MappingIterations;
+        if (!GenerateEdges(graph, numVertices, seed, keys, hashCode))
+        {
+            LogFailure();
+            state = null;
+            return false;
+        }
+
+        // Mapping step
+        uint biggestGValue = 0;
+        uint biggestEdgeValue = 1;
+
+        // Ordering step
+        LogStartOrdering();
+        graph.ObtainCriticalNodes();
+
+        // Searching step
+        LogStartSearching();
+
+        byte[] visited = buildState.Visited;
+        byte[] usedEdges = buildState.UsedEdges;
 
         //Genbox: Originally lookupTable (g) was allocated on each loop. I've moved it out and reuse it.
-        uint[] lookupTable = new uint[numVertices];
+        Array.Clear(lookupTable);
+        Array.Clear(visited);
+        Array.Clear(usedEdges);
 
-        Graph graph = new Graph(_logger, numVertices, numEdges);
         bool restartMapping = false;
 
-        do
+        for (uint i = 0; i < numVertices; ++i) // critical nodes
         {
-            // Mapping step
-            uint biggestGValue = 0;
-            uint biggestEdgeValue = 1;
+            //Genbox: Inverted the if-statement to reduce nesting
+            if (!graph.NodeIsCritical(i) || GetBit(visited, i))
+                continue;
 
-            //Genbox: Changed it so we can control the number of iterations from settings
-            uint iterations = settings.Iterations;
-
-            for (; iterations > 0; iterations--)
-            {
-                LogIteration(iterations);
-
-                //Genbox: In the original code it called modulus to reduce the keyspace of the seed. However, I don't see why that is necessary.
-                seed0 = RandomHelper.Next();
-                seed1 = RandomHelper.Next();
-
-                if (GenerateEdges(graph, numVertices, seed0, seed1, keys, hashCode))
-                    break;
-            }
-
-            if (iterations == 0)
-            {
-                LogFailure();
-                state = null;
-                return false;
-            }
-
-            // Ordering step
-            LogStartOrdering();
-            graph.ObtainCriticalNodes();
-
-            // Searching step
-            LogStartSearching();
-
-            byte[] visited = new byte[(numVertices / 8) + 1];
-            byte[] usedEdges = new byte[(numEdges / 8) + 1];
-
-            //Genbox: Originally lookupTable (g) was allocated on each loop. I've moved it out and reuse it.
-            Array.Clear(lookupTable);
-
-            for (uint i = 0; i < numVertices; ++i) // critical nodes
-            {
-                //Genbox: Inverted the if-statement to reduce nesting
-                if (!graph.NodeIsCritical(i) || GetBit(visited, i))
-                    continue;
-
-                if (settings.Vertices > 1.14)
-                    restartMapping = TraverseCriticalNodes(graph, lookupTable, numEdges, i, ref biggestGValue, ref biggestEdgeValue, usedEdges, visited);
-                else
-                    restartMapping = TraverseCriticalNodesHeuristic(graph, lookupTable, numEdges, i, ref biggestGValue, ref biggestEdgeValue, usedEdges, visited);
-
-                if (restartMapping)
-                    break;
-            }
-
-            if (!restartMapping)
-            {
-                LogTraversingNonCriticalVertices();
-                TraverseNonCriticalNodes(graph, lookupTable, numEdges, numVertices, usedEdges, visited);
-            }
+            if (settings.Vertices > 1.14)
+                restartMapping = TraverseCriticalNodes(graph, lookupTable, numEdges, i, ref biggestGValue, ref biggestEdgeValue, usedEdges, visited);
             else
-            {
-                iterationsMap--;
-                LogRestartMappingStep(iterationsMap);
-            }
-        } while (restartMapping && iterationsMap > 0);
+                restartMapping = TraverseCriticalNodesHeuristic(graph, lookupTable, numEdges, i, ref biggestGValue, ref biggestEdgeValue, usedEdges, visited);
 
-        if (iterationsMap == 0)
+            if (restartMapping)
+                break;
+        }
+
+        if (!restartMapping)
+        {
+            LogTraversingNonCriticalVertices();
+            TraverseNonCriticalNodes(graph, lookupTable, numEdges, numVertices, usedEdges, visited);
+        }
+        else
         {
             LogFailure();
             state = null;
@@ -127,11 +108,46 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
         }
 
         LogSuccess();
-        state = new BmzMinimalState<TKey>(numVertices, seed0, seed1, lookupTable, hashCode);
+        state = new BmzMinimalState<TKey>(numVertices, seed, lookupTable, hashCode);
         return true;
     }
 
-    private bool GenerateEdges<T>(Graph graph, uint numVertices, uint seed0, uint seed1, ReadOnlySpan<T> keys, HashCode<T> hashCode) where T : notnull
+    private sealed class BmzBuildState
+    {
+        public Graph Graph = null!;
+        private uint _graphVertices;
+        private uint _graphEdges;
+        public uint[] LookupTable = [];
+        public byte[] Visited = [];
+        public byte[] UsedEdges = [];
+
+        public void EnsureForGraph(ILogger logger, uint numVertices, uint numEdges)
+        {
+            if (Graph == null || _graphVertices != numVertices || _graphEdges != numEdges)
+            {
+                Graph = new Graph(logger, numVertices, numEdges);
+                _graphVertices = numVertices;
+                _graphEdges = numEdges;
+            }
+        }
+
+        public void EnsureForVertices(int numVertices)
+        {
+            ArrayEnsure.EnsureCapacity(ref LookupTable, numVertices);
+
+            int visitedLength = (numVertices / 8) + 1;
+            ArrayEnsure.EnsureCapacity(ref Visited, visitedLength);
+        }
+
+        public void EnsureForEdges(int numEdges)
+        {
+
+            int usedEdgesLength = (numEdges / 8) + 1;
+            ArrayEnsure.EnsureCapacity(ref UsedEdges, usedEdgesLength);
+        }
+    }
+
+    private bool GenerateEdges<T>(Graph graph, uint numVertices, ulong seed, ReadOnlySpan<T> keys, HashCode<T> hashCode) where T : notnull
     {
         LogGeneratingEdges(numVertices);
         graph.ClearEdges();
@@ -139,8 +155,9 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
         for (int i = 0; i < keys.Length; i++)
         {
             T key = keys[i];
-            uint h1 = hashCode(key, seed0) % numVertices;
-            uint h2 = hashCode(key, seed1) % numVertices;
+            ulong h = hashCode(key, seed);
+            uint h1 = (uint)h % numVertices;
+            uint h2 = (uint)(h >> 32) % numVertices;
 
             if (h1 == h2 && ++h2 >= numVertices)
                 h2 = 0;

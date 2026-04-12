@@ -1,5 +1,3 @@
-using System.Buffers.Binary;
-using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
 using Genbox.FastMPH.Internals.Helpers;
@@ -21,7 +19,7 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
         uint slotsPerPart,
         uint bucketsPerPart,
         PtrHashBucketFunction bucketFunction,
-        uint seed,
+        ulong seed,
         byte[] pilots,
         uint[] remap,
         HashCode<TKey> hashCode)
@@ -58,7 +56,7 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
     public PtrHashBucketFunction BucketFunction { get; }
 
     /// <summary>Construction seed.</summary>
-    public uint Seed { get; }
+    public ulong Seed { get; }
 
     /// <summary>The per-bucket pilot values.</summary>
     public byte[] Pilots { get; }
@@ -114,7 +112,7 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
                sizeof(uint) + // SlotsPerPart
                sizeof(uint) + // BucketsPerPart
                sizeof(byte) + // BucketFunction
-               sizeof(uint) + // Seed
+               sizeof(ulong) + // Seed
                sizeof(uint) + // Pilots length
                (uint)Pilots.Length +
                sizeof(uint) + // Remap length
@@ -131,7 +129,7 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
         sw.WriteUInt32(SlotsPerPart);
         sw.WriteUInt32(BucketsPerPart);
         sw.WriteByte((byte)BucketFunction);
-        sw.WriteUInt32(Seed);
+        sw.WriteUInt64(Seed);
         sw.WriteUInt32((uint)Pilots.Length);
 
         foreach (byte pilot in Pilots)
@@ -148,115 +146,28 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
     /// </summary>
     /// <param name="packed">The serialized hash function.</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static PtrHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static PtrHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
-        if (TryUnpackCurrent(packed, out uint numKeys, out uint numSlots, out uint numParts, out uint slotsPerPart, out uint bucketsPerPart, out PtrHashBucketFunction bucketFunction, out uint seed, out byte[] pilots, out uint[] remap))
-            return new PtrHashMinimalState<TKey>(numKeys, numSlots, numParts, slotsPerPart, bucketsPerPart, bucketFunction, seed, pilots, remap, HashHelper.GetHashFunc(hashFunc));
+        SpanReader sr = new SpanReader(packed);
+        uint numKeys = sr.ReadUInt32();
+        uint numSlots = sr.ReadUInt32();
+        uint numParts = sr.ReadUInt32();
+        uint slotsPerPart = sr.ReadUInt32();
+        uint bucketsPerPart = sr.ReadUInt32();
+        PtrHashBucketFunction bucketFunction = (PtrHashBucketFunction)sr.ReadByte();
+        ulong seed = sr.ReadUInt64();
+        uint pilotsLength = sr.ReadUInt32();
 
-        throw new InvalidOperationException("Invalid packed PTRHash state format");
-    }
+        byte[] pilots = new byte[pilotsLength];
+        for (int i = 0; i < pilotsLength; i++)
+            pilots[i] = sr.ReadByte();
 
-    private static bool TryUnpackCurrent(
-        ReadOnlySpan<byte> packed,
-        out uint numKeys,
-        out uint numSlots,
-        out uint numParts,
-        out uint slotsPerPart,
-        out uint bucketsPerPart,
-        out PtrHashBucketFunction bucketFunction,
-        out uint seed,
-        [NotNullWhen(true)] out byte[]? pilots,
-        [NotNullWhen(true)] out uint[]? remap)
-    {
-        numKeys = 0;
-        numSlots = 0;
-        numParts = 0;
-        slotsPerPart = 0;
-        bucketsPerPart = 0;
-        bucketFunction = PtrHashBucketFunction.Linear;
-        seed = 0;
-        pilots = null;
-        remap = null;
+        uint remapLength = sr.ReadUInt32();
+        uint[] remap = new uint[remapLength];
+        for (int i = 0; i < remapLength; i++)
+            remap[i] = sr.ReadUInt32();
 
-        int offset = 0;
-
-        if (!TryReadUInt32(packed, ref offset, out numKeys) ||
-            !TryReadUInt32(packed, ref offset, out numSlots) ||
-            !TryReadUInt32(packed, ref offset, out numParts) ||
-            !TryReadUInt32(packed, ref offset, out slotsPerPart) ||
-            !TryReadUInt32(packed, ref offset, out bucketsPerPart) ||
-            !TryReadByte(packed, ref offset, out byte bucketFunctionRaw) ||
-            !TryReadUInt32(packed, ref offset, out seed) ||
-            !TryReadUInt32(packed, ref offset, out uint pilotsLength))
-            return false;
-
-        if (bucketFunctionRaw > (byte)PtrHashBucketFunction.CubicEps ||
-            numParts == 0 ||
-            slotsPerPart == 0 ||
-            bucketsPerPart == 0 ||
-            pilotsLength > int.MaxValue)
-            return false;
-
-        bucketFunction = (PtrHashBucketFunction)bucketFunctionRaw;
-        pilots = new byte[pilotsLength];
-
-        for (int i = 0; i < pilots.Length; i++)
-        {
-            if (!TryReadByte(packed, ref offset, out byte pilot))
-                return false;
-
-            pilots[i] = pilot;
-        }
-
-        if (!TryReadUInt32(packed, ref offset, out uint remapLength) || remapLength > int.MaxValue)
-            return false;
-
-        remap = new uint[remapLength];
-
-        for (int i = 0; i < remap.Length; i++)
-        {
-            if (!TryReadUInt32(packed, ref offset, out uint value))
-                return false;
-
-            remap[i] = value;
-        }
-
-        if (offset != packed.Length)
-            return false;
-
-        if ((ulong)numParts * slotsPerPart != numSlots)
-            return false;
-
-        if ((ulong)numParts * bucketsPerPart != pilotsLength)
-            return false;
-
-        return true;
-    }
-
-    private static bool TryReadUInt32(ReadOnlySpan<byte> packed, ref int offset, out uint value)
-    {
-        if ((uint)offset > (uint)(packed.Length - sizeof(uint)))
-        {
-            value = 0;
-            return false;
-        }
-
-        value = BinaryPrimitives.ReadUInt32LittleEndian(packed[offset..]);
-        offset += sizeof(uint);
-        return true;
-    }
-
-    private static bool TryReadByte(ReadOnlySpan<byte> packed, ref int offset, out byte value)
-    {
-        if ((uint)offset >= (uint)packed.Length)
-        {
-            value = 0;
-            return false;
-        }
-
-        value = packed[offset];
-        offset++;
-        return true;
+        return new PtrHashMinimalState<TKey>(numKeys, numSlots, numParts, slotsPerPart, bucketsPerPart, bucketFunction, seed, pilots, remap, HashHelper.GetHashFunc(hashFunc));
     }
 
     private static uint Reduce(ulong hash, uint range) => (uint)Math.BigMul(hash, range, out _);
@@ -275,7 +186,7 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
         return (uint)Math.BigMul(lowBits, range, out _);
     }
 
-    private static ulong PilotMix(byte pilot, uint seed) => unchecked(0x517CC1B727220A95UL * ((ulong)pilot ^ seed));
+    private static ulong PilotMix(byte pilot, ulong seed) => unchecked(0x517CC1B727220A95UL * (pilot ^ seed));
 
     private static ulong ApplyBucketFunction(ulong hash, PtrHashBucketFunction bucketFunction)
     {
@@ -300,5 +211,4 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
             return x;
         }
     }
-
 }

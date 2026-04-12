@@ -12,9 +12,6 @@ public sealed partial class HybleBuilder<TKey> where TKey : notnull
     [LoggerMessage(Level = LogLevel.Debug, Message = "Creating Hyble with {numKeys} keys. approxRange={approxRange} bucketCount={bucketCount}")]
     private partial void LogCreating(uint numKeys, uint approxRange, uint bucketCount);
 
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Trying attempt {attempt} with seed {seed}")]
-    private partial void LogAttempt(uint attempt, uint seed);
-
     [LoggerMessage(Level = LogLevel.Trace, Message = "Failed placing bucket {bucket} of size {size}")]
     private partial void LogBucketFailure(int bucket, int size);
 

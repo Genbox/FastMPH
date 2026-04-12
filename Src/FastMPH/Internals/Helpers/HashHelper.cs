@@ -4,49 +4,21 @@ namespace Genbox.FastMPH.Internals.Helpers;
 
 internal static class HashHelper
 {
-    private const uint Prime2 = 2246822519U;
-    private const uint Prime3 = 3266489917U;
-    private const uint Prime4 = 668265263U;
-    private const uint Prime5 = 374761393U;
+    public static HashCode<T> GetHashFunc<T>(Func<T, ulong> hashFunc) where T : notnull => (a, seed) => Mix64(hashFunc(a) ^ seed);
 
-    private static uint Combine(uint value1, uint value2)
+    public static HashCode3<T> GetHashFunc3<T>(Func<T, ulong> hashFunc) where T : notnull => (a, seed, hashes) =>
     {
-        unchecked
-        {
-            uint hash = 42 + Prime5;
-
-            uint value = hash + (value1 * Prime3);
-            hash = ((value << 17) | (value >> (32 - 17))) * Prime4;
-
-            uint value3 = hash + (value2 * Prime3);
-            hash = ((value3 << 17) | (value3 >> (32 - 17))) * Prime4;
-
-            hash ^= hash >> 15;
-            hash *= Prime2;
-            hash ^= hash >> 13;
-            hash *= Prime3;
-            hash ^= hash >> 16;
-            return hash;
-        }
-    }
-
-    public static HashCode<T> GetHashFunc<T>(Func<T, uint> hashFunc) where T : notnull
-    {
-        return (a, b) => Combine(hashFunc(a), b);
-    }
-
-    public static HashCode3<T> GetHashFunc3<T>(Func<T, uint> hashFunc) where T : notnull => (a, b, hashes) =>
-    {
-        hashes[0] = Combine(hashFunc(a), b);
-        hashes[1] = Murmur_32(hashes[0]);
-        hashes[2] = Murmur_32(hashes[1]);
+        ulong h = Mix64(hashFunc(a) ^ seed);
+        hashes[0] = (uint)h;
+        hashes[1] = (uint)(h >> 32);
+        hashes[2] = Murmur_32(hashes[0] ^ hashes[1]);
     };
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint Reduce(uint hash, uint range) => (uint)(((ulong)hash * range) >> 32);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static uint Reduce(ulong hash, uint range) => (uint)Math.BigMul(hash, range, out _);
+    public static uint Reduce64(ulong hash, uint range) => (uint)Math.BigMul(hash, range, out _);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint Murmur_32(uint h)
@@ -59,6 +31,20 @@ internal static class HashHelper
             h *= 0xc2b2ae35;
             h ^= h >> 16;
             return h;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ulong Mix64(ulong x)
+    {
+        unchecked
+        {
+            x ^= x >> 30;
+            x *= 0xbf58476d1ce4e5b9UL;
+            x ^= x >> 27;
+            x *= 0x94d049bb133111ebUL;
+            x ^= x >> 31;
+            return x;
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace Genbox.FastMPH.CHM;
 
@@ -14,9 +14,6 @@ public partial class ChmBuilder<TKey>
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Staring mapping step")]
     private partial void LogMappingStep();
-
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Trying iteration {iteration}")]
-    private partial void LogIteration(uint iteration);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Failed to generate function")]
     private partial void LogFailed();

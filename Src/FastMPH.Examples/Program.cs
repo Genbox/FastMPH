@@ -1,3 +1,4 @@
+using Genbox.FastMPH;
 using Genbox.FastMPH.CHD;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -17,7 +18,7 @@ internal static class Program
             "cow"
         ];
 
-        if (!builder.TryCreateMinimal(data, value => unchecked((uint)value.GetHashCode()), out ChdMinimalState<string>? state))
+        if (!builder.TryCreateMinimalWithRetry(data, value => unchecked((ulong)value.GetHashCode(StringComparison.Ordinal)), out ChdMinimalState<string>? state))
         {
             Console.WriteLine("Unable to create perfect hash function");
             return;

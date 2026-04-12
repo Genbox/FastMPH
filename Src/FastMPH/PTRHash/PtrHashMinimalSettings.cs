@@ -35,11 +35,6 @@ public sealed class PtrHashMinimalSettings : HashSettings
     } = 3.0;
 
     /// <summary>
-    /// Create settings with PTRHash defaults.
-    /// </summary>
-    public PtrHashMinimalSettings() => Iterations = 20;
-
-    /// <summary>
     /// Maximum number of pilot values to try for each bucket. Default is 256, which means pilot values [0,255].
     /// </summary>
     public uint MaxPilot

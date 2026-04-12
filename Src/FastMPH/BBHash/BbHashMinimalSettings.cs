@@ -1,5 +1,6 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.BBHash;
@@ -8,18 +9,6 @@ namespace Genbox.FastMPH.BBHash;
 [PublicAPI]
 public sealed class BbHashMinimalSettings : HashSettings
 {
-    /// <summary>
-    /// First seed.
-    /// Default is 0xAAAAAAAA55555555.
-    /// </summary>
-    public uint Seed0 { get; set; } = 0xAAAAAAAAU;
-
-    /// <summary>
-    /// Second seed.
-    /// Default is 0x33333333CCCCCCCC.
-    /// </summary>
-    public uint Seed1 { get; set; } = 0x33333333U;
-
     /// <summary>
     /// Controls the domain size per level. Higher values usually improve build reliability at the cost of larger state.
     /// Default is 2.0.

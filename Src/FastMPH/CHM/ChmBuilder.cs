@@ -21,42 +21,31 @@ namespace Genbox.FastMPH.CHM;
 public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMinimalState<TKey>, ChmMinimalSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)] out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)] out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null)
     {
         settings ??= new ChmMinimalSettings();
 
         HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
+        ChmBuildState buildState = new ChmBuildState();
+
+        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
+    }
+
+    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, ChmMinimalSettings settings, ulong seed, ChmBuildState buildState, [NotNullWhen(true)]out ChmMinimalState<TKey>? state)
+    {
         LogCreating(keys.Length, settings.LoadFactor);
 
         uint numEdges = (uint)keys.Length;
         uint numVertices = (uint)Math.Ceiling(settings.LoadFactor * numEdges);
 
-        Graph graph = new Graph(_logger, numVertices, numEdges);
+        buildState.EnsureForGraph(_logger, numVertices, numEdges);
+        Graph graph = buildState.Graph;
 
         //Mapping step
         LogMappingStep();
 
-        uint seed0 = 0;
-        uint seed1 = 0;
-
-        //Genbox: Made the number of iterations configurable
-        uint iterations = settings.Iterations;
-
-        //Genbox: Rewrote the iterations code here
-        for (; iterations > 0; iterations--)
-        {
-            LogIteration(iterations);
-
-            //Genbox: Don't use mod to reduce the keyspace. There is no need for it.
-            seed0 = RandomHelper.Next();
-            seed1 = RandomHelper.Next();
-
-            if (GenerateEdges(graph, seed0, seed1, numVertices, keys, hashCode))
-                break;
-        }
-
-        if (iterations == 0)
+        if (!GenerateEdges(graph, seed, numVertices, keys, hashCode))
         {
             LogFailed();
             state = null;
@@ -66,8 +55,11 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
         //Assignment step
         LogAssignmentStep();
 
-        byte[] visited = new byte[(numVertices / 8) + 1];
-        uint[] lookupTable = new uint[numVertices];
+        buildState.EnsureForVertices((int)numVertices);
+        byte[] visited = buildState.Visited;
+        uint[] lookupTable = buildState.LookupTable;
+        Array.Clear(visited, 0, visited.Length);
+        Array.Clear(lookupTable, 0, lookupTable.Length);
 
         for (uint i = 0; i < numVertices; ++i)
         {
@@ -79,8 +71,34 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
         }
 
         LogSuccess();
-        state = new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed0, seed1, hashCode);
+        state = new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed, hashCode);
         return true;
+    }
+
+    private sealed class ChmBuildState
+    {
+        public Graph Graph = null!;
+        private uint _graphVertices;
+        private uint _graphEdges;
+        public byte[] Visited = [];
+        public uint[] LookupTable = [];
+
+        public void EnsureForGraph(ILogger logger, uint numVertices, uint numEdges)
+        {
+            if (Graph == null || _graphVertices != numVertices || _graphEdges != numEdges)
+            {
+                Graph = new Graph(logger, numVertices, numEdges);
+                _graphVertices = numVertices;
+                _graphEdges = numEdges;
+            }
+        }
+
+        public void EnsureForVertices(int numVertices)
+        {
+            int visitedLength = (numVertices / 8) + 1;
+            ArrayEnsure.EnsureCapacity(ref Visited, visitedLength);
+            ArrayEnsure.EnsureCapacity(ref LookupTable, numVertices);
+        }
     }
 
     private void Traverse(Graph graph, uint[] lookupTable, byte[] visited, uint v)
@@ -111,16 +129,16 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
         }
     }
 
-    private bool GenerateEdges<T>(Graph graph, uint seed0, uint seed1, uint numVertices, ReadOnlySpan<T> keys, HashCode<T> hashCode) where T : notnull
+    private bool GenerateEdges<T>(Graph graph, ulong seed, uint numVertices, ReadOnlySpan<T> keys, HashCode<T> hashCode) where T : notnull
     {
         graph.ClearEdges();
 
         for (int e = 0; e < keys.Length; ++e)
         {
             T key = keys[e];
-
-            uint h1 = hashCode(key, seed0) % numVertices;
-            uint h2 = hashCode(key, seed1) % numVertices;
+            ulong h = hashCode(key, seed);
+            uint h1 = (uint)h % numVertices;
+            uint h2 = (uint)(h >> 32) % numVertices;
 
             if (h1 == h2 && ++h2 >= numVertices)
                 h2 = 0;

@@ -40,7 +40,7 @@ public sealed class ChdMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static ChdMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static ChdMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
         ChdState<TKey> state = ChdState<TKey>.Unpack(packed, hashFunc);
         packed = packed[(int)state.GetPackedSize()..];

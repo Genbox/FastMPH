@@ -5,23 +5,23 @@ namespace Genbox.FastMPH.Tests;
 
 public class BbHashTests
 {
-    private static readonly Func<int, uint> _intHash = value => unchecked((uint)value.GetHashCode());
-    private static readonly Func<ulong, uint> _ulongHash = value => unchecked((uint)value.GetHashCode());
-    private static readonly Func<string, uint> _ordinalIgnoreCaseHash = value => unchecked((uint)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
+    private static readonly Func<int, ulong> _intHash = value => unchecked((ulong)value);
+    private static readonly Func<string, ulong> _ordinalIgnoreCaseHash = value => unchecked((ulong)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
 
     [Fact]
-    public void ULongHashCodeCollisionReturnsPartial()
+    public void HashCollisionReturnsPartial()
     {
-        ulong[] values = [0UL, 0x0000000100000001UL];
+        ulong[] values = [0UL, 1UL];
         BbHashBuilder<ulong> builder = new BbHashBuilder<ulong>(NullLogger<BbHashBuilder<ulong>>.Instance);
 
-        Assert.Equal(values[0].GetHashCode(), values[1].GetHashCode());
+        // Force a collision by returning the same hash for both values
+        Func<ulong, ulong> collidingHash = _ => 42UL;
 
-        BbHashBuildStatus status = builder.CreateMinimalWithRemainder(values, _ulongHash, out BbHashBuildResult<ulong>? result);
+        BbHashBuildStatus status = builder.CreateMinimalWithRemainder(values, collidingHash, 0x517CC1B727220A95UL, out BbHashBuildResult<ulong>? result);
 
         Assert.Equal(BbHashBuildStatus.Partial, status);
         Assert.NotNull(result);
-        Assert.False(builder.TryCreateMinimal(values, _ulongHash, out _));
+        Assert.False(builder.TryCreateMinimalWithRetry(values, collidingHash, out _));
 
         Assert.Equal(values.Length, result.Remainder.Count);
         Assert.Contains(values[0], result.Remainder.Keys);
@@ -36,7 +36,7 @@ public class BbHashTests
         int[] values = Enumerable.Range(0, 2000).Select(i => (i * 37) + 11).ToArray();
         BbHashBuilder<int> builder = new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance);
 
-        Assert.True(builder.TryCreateMinimal(values, _intHash, out BbHashMinimalState<int>? state));
+        Assert.True(builder.TryCreateMinimalWithRetry(values, _intHash, out BbHashMinimalState<int>? state));
         Assert.NotNull(state);
 
         for (int i = 0; i < values.Length; i++)
@@ -52,7 +52,7 @@ public class BbHashTests
         int[] values = Enumerable.Range(0, 1000).ToArray();
         BbHashBuilder<int> builder = new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance);
 
-        Assert.True(builder.TryCreateMinimal(values, _intHash, out BbHashMinimalState<int>? state));
+        Assert.True(builder.TryCreateMinimalWithRetry(values, _intHash, out BbHashMinimalState<int>? state));
         Assert.NotNull(state);
         Assert.NotEmpty(state.Domains);
 
@@ -67,11 +67,11 @@ public class BbHashTests
         BbHashBuilder<int> builder = new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance);
         BbHashMinimalSettings settings = new BbHashMinimalSettings { MaxLevels = 0 };
 
-        BbHashBuildStatus status = builder.CreateMinimalWithRemainder(values, _intHash, out BbHashBuildResult<int>? result, settings);
+        BbHashBuildStatus status = builder.CreateMinimalWithRemainder(values, _intHash, 0x517CC1B727220A95UL, out BbHashBuildResult<int>? result, settings);
 
         Assert.Equal(BbHashBuildStatus.Partial, status);
         Assert.NotNull(result);
-        Assert.False(builder.TryCreateMinimal(values, _intHash, out _, settings));
+        Assert.False(builder.TryCreateMinimalWithRetry(values, _intHash, out _, settings));
 
         Assert.Empty(result.State.Domains);
         Assert.Equal((uint)values.Length, result.State.NumKeys);
@@ -90,7 +90,7 @@ public class BbHashTests
         string[] values = ["alpha", "beta", "gamma", "delta"];
         BbHashBuilder<string> builder = new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance);
 
-        Assert.True(builder.TryCreateMinimal(values, _ordinalIgnoreCaseHash, out BbHashMinimalState<string>? state));
+        Assert.True(builder.TryCreateMinimalWithRetry(values, _ordinalIgnoreCaseHash, out BbHashMinimalState<string>? state));
         Assert.NotNull(state);
 
         Assert.Equal(state.Search("alpha"), state.Search("ALPHA"));
@@ -106,10 +106,10 @@ public class BbHashTests
         BbHashBuilder<int> builder = new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance);
         BbHashMinimalSettings settings = new BbHashMinimalSettings { Gamma = uint.MaxValue };
 
-        BbHashBuildStatus status = builder.CreateMinimalWithRemainder(values, _intHash, out BbHashBuildResult<int>? result, settings);
+        BbHashBuildStatus status = builder.CreateMinimalWithRemainder(values, _intHash, 0x517CC1B727220A95UL, out BbHashBuildResult<int>? result, settings);
 
         Assert.Equal(BbHashBuildStatus.Failure, status);
         Assert.Null(result);
-        Assert.False(builder.TryCreateMinimal(values, _intHash, out _, settings));
+        Assert.False(builder.TryCreateMinimalWithRetry(values, _intHash, out _, settings));
     }
 }

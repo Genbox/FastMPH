@@ -13,7 +13,7 @@ public partial class FchBuilder<TKey> where TKey : notnull
     private partial void LogCreating(uint numKeys, double bitsPerKey);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Starting mapping step with seed {seed}. b:{b}  p1:{p1}  p2:{p2}")]
-    private partial void LogMappingStep(uint seed, uint b, double p1, double p2);
+    private partial void LogMappingStep(ulong seed, uint b, double p1, double p2);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Starting ordering step")]
     private partial void LogOrderingStep();
@@ -37,8 +37,5 @@ public partial class FchBuilder<TKey> where TKey : notnull
     private static partial void LogIncreasingCapacity(ILogger logger, uint capacity, uint newCapacity);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Successfully created FCH with seeds {seed0}, {seed1}")]
-    private partial void LogSuccess(uint seed0, uint seed1);
-
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Trying iteration {iteration}")]
-    private partial void LogIteration(uint iteration);
+    private partial void LogSuccess(ulong seed0, ulong seed1);
 }

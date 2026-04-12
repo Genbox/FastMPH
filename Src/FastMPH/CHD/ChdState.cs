@@ -15,7 +15,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     internal readonly uint NumKeys;
     internal readonly byte[] OccupTable;
 
-    internal ChdState(CompressedSequence cs, uint numBuckets, uint numBins, uint numKeys, uint seed, byte[] occupTable, HashCode3<TKey> hashCode)
+    internal ChdState(CompressedSequence cs, uint numBuckets, uint numBins, uint numKeys, ulong seed, byte[] occupTable, HashCode3<TKey> hashCode)
     {
         _cs = cs;
         NumBuckets = numBuckets;
@@ -27,7 +27,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     }
 
     /// <summary>The seed used in the hash function</summary>
-    public uint Seed { get; }
+    public ulong Seed { get; }
 
     /// <summary>The number of buckets</summary>
     public uint NumBuckets { get; }
@@ -55,7 +55,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     /// <inheritdoc />
     public uint GetPackedSize()
     {
-        uint size = sizeof(uint) + //Seed
+        uint size = sizeof(ulong) + //Seed
                     sizeof(uint) + //NumBuckets
                     sizeof(uint) + //NumBins
                     sizeof(uint) + //NumKeys
@@ -71,7 +71,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     public void Pack(Span<byte> buffer)
     {
         SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(Seed);
+        sw.WriteUInt64(Seed);
         sw.WriteUInt32(NumBuckets);
         sw.WriteUInt32(NumBins);
         sw.WriteUInt32(NumKeys);
@@ -88,10 +88,10 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static ChdState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static ChdState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
-        uint seed = sr.ReadUInt32();
+        ulong seed = sr.ReadUInt64();
         uint numBuckets = sr.ReadUInt32();
         uint numBins = sr.ReadUInt32();
         uint numKeys = sr.ReadUInt32();

@@ -20,5 +20,5 @@ public interface IHashBuilder<TKey, TState, in TSettings> where TKey : notnull w
     /// <param name="state">Once successful this variable contains the finished function.</param>
     /// <param name="settings">Settings for this hash function</param>
     /// <returns>True if the function succeeded in creating a PHF</returns>
-    bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out TState? state, TSettings? settings = null);
+    bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out TState? state, TSettings? settings = null);
 }

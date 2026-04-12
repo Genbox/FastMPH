@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace Genbox.FastMPH.BDZ;
 
@@ -28,7 +28,7 @@ public partial class BdzBuilder<TKey>
     private partial void LogFailed();
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Entering mapping step for with {keys} keys, {partitions} partitions, {edges} edges and seed {seed}")]
-    private partial void LogMappingStep(int keys, uint seed, uint partitions, uint edges);
+    private partial void LogMappingStep(int keys, ulong seed, uint partitions, uint edges);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Entering assigning step for with {queueLength} queue length and a graph of {vertices} vertices")]
     private partial void LogAssigningStep(int queueLength, uint vertices);
@@ -37,7 +37,7 @@ public partial class BdzBuilder<TKey>
     private partial void LogRankingStep(int lookupTableLength, uint indexInRank, uint rankTableLength);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Successfully created BDZ with seed {seed} and {numPartitions} partitions")]
-    private partial void LogSuccess(uint seed, uint numPartitions);
+    private partial void LogSuccess(ulong seed, uint numPartitions);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "A: {v0} {v1} {v2} -- {e0} {e1} {e2}")]
     private partial void LogEntryA(uint v0, uint v1, uint v2, uint e0, uint e1, uint e2);
@@ -53,7 +53,4 @@ public partial class BdzBuilder<TKey>
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "RankTable: {rankTable}")]
     private partial void LogRankTable(uint[] rankTable);
-
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Trying iteration {iteration}")]
-    private partial void LogIteration(uint iteration);
 }

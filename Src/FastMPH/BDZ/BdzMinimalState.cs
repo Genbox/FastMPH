@@ -12,7 +12,7 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
 {
     private readonly HashCode3<TKey> _hashCode;
 
-    internal BdzMinimalState(uint numPartitions, byte[] lookupTable, uint seed, byte bitsOfKey, uint[] rankTable, HashCode3<TKey> hashCode)
+    internal BdzMinimalState(uint numPartitions, byte[] lookupTable, ulong seed, byte bitsOfKey, uint[] rankTable, HashCode3<TKey> hashCode)
     {
         _hashCode = hashCode;
         NumPartitions = numPartitions;
@@ -29,7 +29,7 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     public byte[] LookupTable { get; }
 
     /// <summary>The seed that was used for the hash function</summary>
-    public uint Seed { get; }
+    public ulong Seed { get; }
 
     /// <summary>The number of bits per key. It determines the amount of information in the rank table. Larger values means more compact hash functions, but slower evaluation time.</summary>
     public byte BitsOfKey { get; }
@@ -55,7 +55,7 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     public void Pack(Span<byte> buffer)
     {
         SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(Seed);
+        sw.WriteUInt64(Seed);
         sw.WriteUInt32(NumPartitions);
 
         sw.WriteUInt32((uint)RankTable.Length);
@@ -74,7 +74,7 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint GetPackedSize()
     {
-        uint size = sizeof(uint) + //Seed
+        uint size = sizeof(ulong) + //Seed
                     sizeof(uint) + //NumPartitions
                     sizeof(uint) + //LookupTable length
                     (sizeof(byte) * (uint)LookupTable.Length) + //LookupTable
@@ -90,11 +90,11 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static BdzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static BdzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
 
-        uint seed = sr.ReadUInt32();
+        ulong seed = sr.ReadUInt64();
         uint numPartitions = sr.ReadUInt32();
 
         uint rankTableLength = sr.ReadUInt32();

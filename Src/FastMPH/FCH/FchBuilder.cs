@@ -22,48 +22,40 @@ namespace Genbox.FastMPH.FCH;
 public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMinimalState<TKey>, FchMinimalSettings> where TKey : notnull
 {
     private const uint Index = 0;
+    private const ulong SeedStep = 0x9E3779B97F4A7C15UL;
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, uint> hashFunc, [NotNullWhen(true)]out FchMinimalState<TKey>? state, FchMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out FchMinimalState<TKey>? state, FchMinimalSettings? settings = null)
     {
         settings ??= new FchMinimalSettings();
 
         HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
 
+        FchBuildState buildState = new FchBuildState();
+
+        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
+    }
+
+    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, FchMinimalSettings settings, ulong seed0, FchBuildState buildState, [NotNullWhen(true)]out FchMinimalState<TKey>? state)
+    {
         uint numItems = (uint)keys.Length;
 
         LogCreating(numItems, settings.BitsPerKey);
 
-        uint iterations = settings.Iterations;
-
         uint b = CalculateB(settings.BitsPerKey, numItems);
         double p1 = CalculateP1(numItems);
         double p2 = CalculateP2(b);
-        uint[] lookupTable = new uint[(int)b];
+        buildState.EnsureForLookup((int)b);
+        uint[] lookupTable = buildState.LookupTable;
 
-        uint seed0 = 0;
-        uint seed1 = 0;
+        LogMappingStep(seed0, b, p1, p2);
+        Buckets<TKey> buckets = Mapping(seed0, b, p1, p2, numItems, keys, hashCode);
 
-        for (; iterations > 0; iterations--)
-        {
-            LogIteration(iterations);
+        LogOrderingStep();
+        uint[] sortedIndexes = Ordering(buckets);
 
-            //Genbox: Removed mod
-            seed0 = RandomHelper.Next();
-
-            LogMappingStep(seed0, b, p1, p2);
-            Buckets<TKey> buckets = Mapping(seed0, b, p1, p2, numItems, keys, hashCode);
-
-            LogOrderingStep();
-            uint[] sortedIndexes = Ordering(buckets);
-
-            LogSearchingStep();
-            //Genbox: Important to note that Searching() returns true if it fails
-            if (!Searching(buckets, sortedIndexes, lookupTable, numItems, hashCode, out seed1))
-                break;
-        }
-
-        if (iterations == 0)
+        LogSearchingStep();
+        if (Searching(buckets, sortedIndexes, lookupTable, numItems, hashCode, seed0, settings.MaxSearchingIterations, settings.MaxSeedGenerationIterations, buildState, out ulong seed1))
         {
             LogFailed();
             state = null;
@@ -75,14 +67,14 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         return true;
     }
 
-    private Buckets<T> Mapping<T>(uint seed, uint b, double p1, double p2, uint m, ReadOnlySpan<T> keys, HashCode<T> hashCode)
+    private Buckets<T> Mapping<T>(ulong seed, uint b, double p1, double p2, uint m, ReadOnlySpan<T> keys, HashCode<T> hashCode)
     {
         Buckets<T> buckets = new Buckets<T>(_logger, b);
 
         for (int i = 0; i < m; i++)
         {
             T key = keys[i];
-            uint hashVal = hashCode(key, seed);
+            uint hashVal = (uint)hashCode(key, seed);
             uint h1 = hashVal % m;
             h1 = Mixh10h11h12(b, p1, p2, h1);
             buckets.Insert(h1, key);
@@ -93,10 +85,11 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
 
     private static uint[] Ordering<T>(Buckets<T> buckets) => buckets.GetIndexesSortedBySize();
 
-    private bool Searching<T>(Buckets<T> buckets, uint[] sortedIndexes, uint[] lookupTable, uint m, HashCode<T> hashCode, out uint seed) where T : notnull
+    private bool Searching<T>(Buckets<T> buckets, uint[] sortedIndexes, uint[] lookupTable, uint m, HashCode<T> hashCode, ulong seed0, uint maxSearchingIterations, uint maxSeedGenerationIterations, FchBuildState buildState, out ulong seed) where T : notnull
     {
-        uint[] randomTable = new uint[m];
-        uint[] mapTable = new uint[m];
+        buildState.EnsureForMaps((int)m);
+        uint[] randomTable = buildState.RandomTable;
+        uint[] mapTable = buildState.MapTable;
         uint iterationToGenerateH2 = 0;
         uint searchingIterations = 0;
         bool restart;
@@ -106,15 +99,17 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         for (i = 0; i < m; i++)
             randomTable[i] = i;
 
-        Permute(randomTable, m);
+        Permute(randomTable, m, seed0);
 
         for (i = 0; i < m; i++)
             mapTable[randomTable[i]] = i;
 
+        ulong seedState = seed0;
+
         do
         {
-            seed = RandomHelper.Next();
-            restart = CheckForCollisionsH2(m, seed, buckets, sortedIndexes, hashCode);
+            seed = GetNextSeed(ref seedState);
+            restart = CheckForCollisionsH2(m, seed, buckets, sortedIndexes, hashCode, buildState);
             uint filledCount = 0;
 
             if (!restart)
@@ -141,7 +136,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
                 {
                     T key = buckets.GetKey(sortedIndexes[i], Index);
 
-                    uint hashVal = hashCode(key, seed);
+                    uint hashVal = (uint)hashCode(key, seed);
                     uint h2 = hashVal % m;
 
                     lookupTable[sortedIndexes[i]] = ((m + randomTable[filledCount + z]) - h2) % m;
@@ -155,7 +150,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
                     do
                     {
                         key = buckets.GetKey(sortedIndexes[i], j);
-                        uint hashVal2 = hashCode(key, seed);
+                        uint hashVal2 = (uint)hashCode(key, seed);
                         h2 = hashVal2 % m;
                         uint index = (h2 + lookupTable[sortedIndexes[i]]) % m;
 
@@ -180,9 +175,16 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
                     } while (j % bucketSize != Index);
                 }
             }
-        } while (restart && searchingIterations < 10 && iterationToGenerateH2 < 1000);
+        } while (restart && searchingIterations < maxSearchingIterations && iterationToGenerateH2 < maxSeedGenerationIterations);
 
         return restart;
+    }
+
+    private static ulong GetNextSeed(ref ulong seedState)
+    {
+        ulong seed = seedState;
+        seedState = unchecked(seedState + SeedStep);
+        return seed;
     }
 
     internal static uint Mixh10h11h12(uint b, double p1, double p2, uint initialIndex)
@@ -201,31 +203,65 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
     }
 
     /* Check whether function h2 causes collisions among the keys of each bucket */
-    private bool CheckForCollisionsH2<T>(uint m, uint seed, Buckets<T> buckets, uint[] sortedIndexes, HashCode<T> hashCode)
+    private bool CheckForCollisionsH2<T>(uint m, ulong seed, Buckets<T> buckets, uint[] sortedIndexes, HashCode<T> hashCode, FchBuildState buildState)
     {
-        byte[] hashtable = new byte[m];
+        buildState.EnsureForHashTable((int)m);
+        byte[] stampTable = buildState.StampTable;
         uint numBuckets = buckets.GetNumBuckets();
+        byte stamp = 1;
 
         for (int i = 0; i < numBuckets; i++)
         {
             uint numKeys = buckets.GetSize(sortedIndexes[i]);
-            Array.Clear(hashtable);
+            stamp++;
+
+            if (stamp == 0)
+            {
+                Array.Clear(stampTable, 0, stampTable.Length);
+                stamp = 1;
+            }
 
             LogBucket(i, numKeys);
 
             for (uint j = 0; j < numKeys; j++)
             {
                 T key = buckets.GetKey(sortedIndexes[i], j);
-                uint hashVal = hashCode(key, seed);
+                uint hashVal = (uint)hashCode(key, seed);
                 uint index = hashVal % m;
 
-                if (hashtable[index] != 0)
+                if (stampTable[index] == stamp)
                     return true; // collision detected
 
-                hashtable[index] = 1;
+                stampTable[index] = stamp;
             }
         }
         return false;
+    }
+
+    private sealed class FchBuildState
+    {
+        public uint[] LookupTable = [];
+        public uint[] RandomTable = [];
+        public uint[] MapTable = [];
+        public byte[] StampTable = [];
+
+        public void EnsureForLookup(int size)
+        {
+            ArrayEnsure.EnsureCapacity(ref LookupTable, size);
+
+            Array.Clear(LookupTable, 0, size);
+        }
+
+        public void EnsureForMaps(int size)
+        {
+            ArrayEnsure.EnsureCapacity(ref RandomTable, size);
+            ArrayEnsure.EnsureCapacity(ref MapTable, size);
+        }
+
+        public void EnsureForHashTable(int size)
+        {
+            ArrayEnsure.EnsureCapacity(ref StampTable, size);
+        }
     }
 
     private static uint CalculateB(double c, uint m) => (uint)Math.Ceiling((c * m) / ((Math.Log(m) / Math.Log(2.0)) + 1));
@@ -234,34 +270,35 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
 
     private static double CalculateP2(uint b) => Math.Ceiling(0.3 * b);
 
-    private static void Permute(uint[] vector, uint n)
+    private static void Permute(uint[] vector, uint n, ulong seed)
     {
         for (int i = 0; i < n; i++)
         {
-            uint j = RandomHelper.Next() % n;
+            uint j = (uint)(NextPseudoRandom(ref seed) % n);
             (vector[i], vector[j]) = (vector[j], vector[i]);
         }
     }
 
-    private sealed class Bucket<T>
+    private static ulong NextPseudoRandom(ref ulong state)
     {
-        private readonly ILogger _logger;
-        private uint _capacity;
-        private T[] _entries;
-        private uint _size;
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        return state;
+    }
 
-        public Bucket(ILogger logger)
-        {
-            _logger = logger;
-            _entries = new T[1];
-        }
+    private sealed class Bucket<T>(ILogger logger)
+    {
+        private uint _capacity;
+        private T[] _entries = new T[1];
+        private uint _size;
 
         private void Reserve(uint size)
         {
             if (_capacity < size)
             {
                 uint newCapacity = _capacity + 1;
-                LogIncreasingCapacity(_logger, _capacity, size);
+                LogIncreasingCapacity(logger, _capacity, size);
 
                 while (newCapacity < size)
                     newCapacity *= 2;

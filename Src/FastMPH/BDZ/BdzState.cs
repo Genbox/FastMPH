@@ -11,7 +11,7 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
 {
     private readonly HashCode3<TKey> _hashCode;
 
-    internal BdzState(uint numPartitions, byte[] lookupTable, uint seed, HashCode3<TKey> hashCode)
+    internal BdzState(uint numPartitions, byte[] lookupTable, ulong seed, HashCode3<TKey> hashCode)
     {
         _hashCode = hashCode;
         NumPartitions = numPartitions;
@@ -26,7 +26,7 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
     public byte[] LookupTable { get; }
 
     /// <summary>The seed that was used for the hash function</summary>
-    public uint Seed { get; }
+    public ulong Seed { get; }
 
     /// <inheritdoc />
     public uint Search(TKey key)
@@ -54,7 +54,7 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
     public void Pack(Span<byte> buffer)
     {
         SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(Seed);
+        sw.WriteUInt64(Seed);
         sw.WriteUInt32(NumPartitions);
         sw.WriteUInt32((uint)LookupTable.Length);
 
@@ -65,7 +65,7 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
     /// <inheritdoc />
     public uint GetPackedSize()
     {
-        uint size = sizeof(uint) + //Seed
+        uint size = sizeof(ulong) + //Seed
                     sizeof(uint) + //NumPartitions
                     sizeof(uint) + //LookupTable length
                     (sizeof(byte) * (uint)LookupTable.Length); //LookupTable
@@ -78,11 +78,11 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static BdzState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static BdzState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
 
-        uint seed = sr.ReadUInt32();
+        ulong seed = sr.ReadUInt64();
         uint numPartitions = sr.ReadUInt32();
 
         uint lookupTableLength = sr.ReadUInt32();

@@ -12,7 +12,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     private readonly HashCode<TKey> _hashCode;
     private readonly uint _bucketMask;
 
-    internal HybleState(uint approxRange, uint seed, ushort[] displacements, HashCode<TKey> hashCode)
+    internal HybleState(uint approxRange, ulong seed, ushort[] displacements, HashCode<TKey> hashCode)
     {
         ApproxRange = approxRange;
         Seed = seed;
@@ -25,7 +25,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     public uint ApproxRange { get; }
 
     /// <summary>Construction seed.</summary>
-    public uint Seed { get; }
+    public ulong Seed { get; }
 
     /// <summary>Per-bucket displacement values.</summary>
     public ushort[] Displacements { get; }
@@ -33,7 +33,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint hash = _hashCode(key, Seed);
+        ulong hash = _hashCode(key, Seed);
         return SearchHash(hash);
     }
 
@@ -41,15 +41,13 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     /// Compute the index from a pre-hashed value.
     /// </summary>
     /// <param name="hash">Hash of the key. Only the lower 32 bits are used.</param>
-    public uint SearchHash(ulong hash) => SearchHash((uint)hash);
-
     /// <summary>
     /// Compute the index from a pre-hashed value.
     /// </summary>
-    /// <param name="hash">32-bit hash of the key.</param>
-    public uint SearchHash(uint hash)
+    /// <param name="hash">Hash of the key.</param>
+    public uint SearchHash(ulong hash)
     {
-        uint approx = HashHelper.Reduce(hash, ApproxRange);
+        uint approx = HashHelper.Reduce64(hash, ApproxRange);
         int bucket = (int)(hash & _bucketMask);
 
         return approx + Displacements[bucket];
@@ -60,7 +58,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     /// <c>[ApproxRange:u32][Seed:u32][DisplacementsLength:u32][Displacements:u16[]]</c>.
     /// </summary>
     public uint GetPackedSize() => sizeof(uint) + // ApproxRange
-                                   sizeof(uint) + // Seed
+                                   sizeof(ulong) + // Seed
                                    sizeof(uint) + // Displacements length
                                    ((uint)Displacements.Length * sizeof(ushort));
 
@@ -71,7 +69,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     {
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(ApproxRange);
-        sw.WriteUInt32(Seed);
+        sw.WriteUInt64(Seed);
         sw.WriteUInt32((uint)Displacements.Length);
 
         foreach (ushort displacement in Displacements)
@@ -83,11 +81,11 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     /// </summary>
     /// <param name="packed">The serialized hash function.</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static HybleState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static HybleState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
         uint approxRange = sr.ReadUInt32();
-        uint seed = sr.ReadUInt32();
+        ulong seed = sr.ReadUInt64();
         int displacementLength = (int)sr.ReadUInt32();
         ushort[] displacements = new ushort[displacementLength];
 

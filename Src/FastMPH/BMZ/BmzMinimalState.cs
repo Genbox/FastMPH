@@ -11,23 +11,19 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
 {
     private readonly HashCode<TKey> _hashCode;
 
-    internal BmzMinimalState(uint numVertices, uint seed0, uint seed1, uint[] lookupTable, HashCode<TKey> func)
+    internal BmzMinimalState(uint numVertices, ulong seed, uint[] lookupTable, HashCode<TKey> func)
     {
         _hashCode = func;
         NumVertices = numVertices;
-        Seed0 = seed0;
-        Seed1 = seed1;
+        Seed = seed;
         LookupTable = lookupTable;
     }
 
     /// <summary>Contains the number of vertices in the graph</summary>
     public uint NumVertices { get; }
 
-    /// <summary>The seed used in the first hash function</summary>
-    public uint Seed0 { get; }
-
-    /// <summary>The seed used in the second hash function</summary>
-    public uint Seed1 { get; }
+    /// <summary>The seed used in the hash function</summary>
+    public ulong Seed { get; }
 
     /// <summary>The lookup table</summary>
     public uint[] LookupTable { get; }
@@ -35,8 +31,9 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint h1 = _hashCode(key, Seed0) % NumVertices;
-        uint h2 = _hashCode(key, Seed1) % NumVertices;
+        ulong h = _hashCode(key, Seed);
+        uint h1 = (uint)h % NumVertices;
+        uint h2 = (uint)(h >> 32) % NumVertices;
 
         if (h1 == h2 && ++h2 >= NumVertices)
             h2 = 0;
@@ -46,8 +43,7 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
 
     /// <inheritdoc />
     public uint GetPackedSize() => sizeof(uint) + //NumVertices
-                                   sizeof(uint) + //Seed0
-                                   sizeof(uint) + //Seed1
+                                   sizeof(ulong) + //Seed
                                    sizeof(uint) + //Length of lookupTable
                                    (sizeof(uint) * (uint)LookupTable.Length); //lookupTable
 
@@ -56,8 +52,7 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     {
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(NumVertices);
-        sw.WriteUInt32(Seed0);
-        sw.WriteUInt32(Seed1);
+        sw.WriteUInt64(Seed);
         sw.WriteUInt32((uint)LookupTable.Length);
 
         foreach (uint t in LookupTable)
@@ -69,12 +64,11 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static BmzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static BmzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
         SpanReader sw = new SpanReader(packed);
         uint numVertices = sw.ReadUInt32();
-        uint seed0 = sw.ReadUInt32();
-        uint seed1 = sw.ReadUInt32();
+        ulong seed = sw.ReadUInt64();
         uint length = sw.ReadUInt32();
 
         uint[] lookupTable = new uint[length];
@@ -82,6 +76,6 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         for (int i = 0; i < length; i++)
             lookupTable[i] = sw.ReadUInt32();
 
-        return new BmzMinimalState<TKey>(numVertices, seed0, seed1, lookupTable, HashHelper.GetHashFunc(hashFunc));
+        return new BmzMinimalState<TKey>(numVertices, seed, lookupTable, HashHelper.GetHashFunc(hashFunc));
     }
 }

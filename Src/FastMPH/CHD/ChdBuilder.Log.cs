@@ -34,7 +34,7 @@ public sealed partial class ChdBuilder<TKey>
     private partial void LogFailed();
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Successfully created CHD with seed {seed}")]
-    private partial void LogSuccess(uint seed);
+    private partial void LogSuccess(ulong seed);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "BUCKET {currentBucket} PLACED --- DISPLACEMENT = {displacement}")]
     private partial void LogDisplacement(uint currentBucket, uint displacement);

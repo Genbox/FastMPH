@@ -15,11 +15,10 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
 
     private readonly HashCode<TKey> _hashCode;
 
-    internal BbHashMinimalState(uint numKeys, uint seed0, uint seed1, uint[] domains, uint[] offsets, uint[] bitsetStarts, uint[] rankStarts, uint[] bitsetWords, uint[] rankPrefixes, HashCode<TKey> hashCode)
+    internal BbHashMinimalState(uint numKeys, ulong seed, uint[] domains, uint[] offsets, uint[] bitsetStarts, uint[] rankStarts, uint[] bitsetWords, uint[] rankPrefixes, HashCode<TKey> hashCode)
     {
         NumKeys = numKeys;
-        Seed0 = seed0;
-        Seed1 = seed1;
+        Seed = seed;
         Domains = domains;
         Offsets = offsets;
         BitsetStarts = bitsetStarts;
@@ -32,11 +31,8 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
     /// <summary>The number of keys in the original set.</summary>
     public uint NumKeys { get; }
 
-    /// <summary>The first hash seed.</summary>
-    public uint Seed0 { get; }
-
-    /// <summary>The second hash seed.</summary>
-    public uint Seed1 { get; }
+    /// <summary>The hash seed.</summary>
+    public ulong Seed { get; }
 
     /// <summary>Domain size for each level.</summary>
     public uint[] Domains { get; }
@@ -62,7 +58,7 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
         for (int level = 0; level < Domains.Length; level++)
         {
             uint domain = Domains[level];
-            uint pos = HashHelper.Reduce(BbHashHelper.GetLevelHash(key, (uint)level, Seed0, Seed1, _hashCode), domain);
+            uint pos = HashHelper.Reduce(BbHashHelper.GetLevelHash(key, (uint)level, Seed, _hashCode), domain);
 
             int word = (int)(pos >> 5);
             int bit = (int)(pos & 31);
@@ -99,8 +95,7 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
     public uint GetPackedSize()
     {
         return sizeof(uint) + // NumKeys
-               sizeof(uint) + // Seed0
-               sizeof(uint) + // Seed1
+               sizeof(ulong) + // Seed
                sizeof(uint) + // Domains length
                (sizeof(uint) * (uint)Domains.Length) +
                sizeof(uint) + // Offsets length
@@ -120,8 +115,7 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
     {
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(NumKeys);
-        sw.WriteUInt32(Seed0);
-        sw.WriteUInt32(Seed1);
+        sw.WriteUInt64(Seed);
 
         WriteUInt32Array(ref sw, Domains);
         WriteUInt32Array(ref sw, Offsets);
@@ -136,12 +130,11 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
     /// </summary>
     /// <param name="packed">The serialized hash function.</param>
     /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static BbHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, uint> hashFunc)
+    public static BbHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
         uint numKeys = sr.ReadUInt32();
-        uint seed0 = sr.ReadUInt32();
-        uint seed1 = sr.ReadUInt32();
+        ulong seed = sr.ReadUInt64();
 
         uint[] domains = ReadUInt32Array(ref sr);
         uint[] offsets = ReadUInt32Array(ref sr);
@@ -150,7 +143,7 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
         uint[] bitsetWords = ReadUInt32Array(ref sr);
         uint[] rankPrefixes = ReadUInt32Array(ref sr);
 
-        return new BbHashMinimalState<TKey>(numKeys, seed0, seed1, domains, offsets, bitsetStarts, rankStarts, bitsetWords, rankPrefixes, HashHelper.GetHashFunc(hashFunc));
+        return new BbHashMinimalState<TKey>(numKeys, seed, domains, offsets, bitsetStarts, rankStarts, bitsetWords, rankPrefixes, HashHelper.GetHashFunc(hashFunc));
     }
 
     private static void WriteUInt32Array(ref SpanWriter sw, uint[] values)

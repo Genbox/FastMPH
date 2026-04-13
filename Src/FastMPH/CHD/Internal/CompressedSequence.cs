@@ -1,3 +1,4 @@
+using System.Numerics;
 using Genbox.FastMPH.Internals;
 using static Genbox.FastMPH.CHD.Internal.BitBool;
 
@@ -24,7 +25,7 @@ internal sealed class CompressedSequence
                 lengths[i] = 0;
             else
             {
-                lengths[i] = (uint)Math.Log(valsTable[i] + 1, 2);
+                lengths[i] = (uint)BitOperations.Log2(valsTable[i] + 1);
                 _totalLength += lengths[i];
             }
         }
@@ -42,7 +43,7 @@ internal sealed class CompressedSequence
             _totalLength += lengths[i];
         }
 
-        _remR = (uint)Math.Log(_totalLength / n, 2);
+        _remR = _totalLength / n == 0 ? 0 : (uint)BitOperations.Log2(_totalLength / n);
 
         if (_remR == 0)
             _remR = 1;

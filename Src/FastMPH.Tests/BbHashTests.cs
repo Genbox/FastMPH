@@ -39,11 +39,34 @@ public class BbHashTests
         Assert.True(builder.TryCreateMinimalWithRetry(values, _intHash, out BbHashMinimalState<int>? state));
         Assert.NotNull(state);
 
+        HashSet<uint> seen = new HashSet<uint>(values.Length);
+
         for (int i = 0; i < values.Length; i++)
         {
             uint index = state.Search(values[i]);
             Assert.True(index < (uint)values.Length);
+            Assert.True(seen.Add(index), $"Duplicate hash index {index} for key {values[i]}");
         }
+
+        Assert.Equal(values.Length, seen.Count);
+    }
+
+    [Fact]
+    public void RoundtripPreservesSearchResults()
+    {
+        int[] values = Enumerable.Range(0, 3000).Select(i => (i * 53) + 7).ToArray();
+        BbHashBuilder<int> builder = new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance);
+
+        Assert.True(builder.TryCreateMinimalWithRetry(values, _intHash, out BbHashMinimalState<int>? state));
+        Assert.NotNull(state);
+
+        byte[] packed = new byte[state.GetPackedSize()];
+        state.Pack(packed);
+
+        BbHashMinimalState<int> unpacked = BbHashMinimalState<int>.Unpack(packed, _intHash);
+
+        for (int i = 0; i < values.Length; i++)
+            Assert.Equal(state.Search(values[i]), unpacked.Search(values[i]));
     }
 
     [Fact]

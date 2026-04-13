@@ -23,7 +23,7 @@ public sealed class RetryOptions
             Validator.RequireThat(value > 0);
             field = value;
         }
-    } = 64;
+    } = 256;
 
     public ulong InitialSeed { get; set; } = 0x517CC1B727220A95UL;
     public ulong SeedStep { get; set; } = 0x9E3779B97F4A7C15UL;

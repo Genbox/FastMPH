@@ -193,7 +193,7 @@ internal sealed partial class Graph
 
     public GraphIterator GetGraphIterator(uint v) => new GraphIterator(v, _first[v]);
 
-    public uint NextNeighbor(GraphIterator it)
+    public uint NextNeighbor(ref GraphIterator it)
     {
         if (it.Edge == Empty)
             return GraphNoNeighbor;

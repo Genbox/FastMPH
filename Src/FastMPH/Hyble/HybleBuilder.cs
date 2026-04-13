@@ -134,23 +134,9 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
             MarkBucketAsUsed(bucket, bucketStarts, bucketCounts, bucketKeyIndices, approxs, displacement, freeBitmap);
         }
 
-        uint capacity = GetCapacity(approxRange, displacements);
         state = new HybleState<TKey>(approxRange, seed, displacements, hashCode);
-        LogSuccess(seed, capacity);
+        LogSuccess(seed, displacements.Length - 1);
         return true;
-    }
-
-    private static uint GetCapacity(uint approxRange, ushort[] displacements)
-    {
-        ushort max = 0;
-
-        for (int i = 0; i < displacements.Length; i++)
-        {
-            if (displacements[i] > max)
-                max = displacements[i];
-        }
-
-        return approxRange + max;
     }
 
     private static bool HasApproxCollision(int[] bucketStarts, int[] bucketCounts, int[] bucketKeyIndices, uint[] approxs)

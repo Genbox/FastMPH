@@ -61,7 +61,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             maxProbes *= maxProbesDefault;
 
         //Genbox: refactored this a bit
-        uint size = settings.KeysPerBin == 1 ? ((numBins + 31) / 32) * sizeof(uint) : numBins * sizeof(uint);
+        uint size = settings.KeysPerBin == 1 ? ((numBins + 31) / 32) * sizeof(uint) : numBins;
 
         buildState.EnsureForBuckets((int)numBuckets);
         buildState.EnsureForKeys((int)numKeys);

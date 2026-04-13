@@ -198,7 +198,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
             GraphIterator it = graph.GetGraphIterator(v);
 
             uint u; /* Auxiliary vertex */
-            while ((u = graph.NextNeighbor(it)) != Graph.GraphNoNeighbor)
+            while ((u = graph.NextNeighbor(ref it)) != Graph.GraphNoNeighbor)
             {
                 //Genbox: Inverted if-statement to reduce nesting
                 if (!graph.NodeIsCritical(u) || GetBit(visited, u))
@@ -214,7 +214,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
                     it1 = graph.GetGraphIterator(u);
                     collision = false;
 
-                    while ((lav = graph.NextNeighbor(it1)) != Graph.GraphNoNeighbor)
+                    while ((lav = graph.NextNeighbor(ref it1)) != Graph.GraphNoNeighbor)
                     {
                         //Genbox: Inverted if-statement to reduce nesting
                         if (!graph.NodeIsCritical(lav) || !GetBit(visited, lav))
@@ -236,7 +236,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
 
                 // Marking used edges...
                 it1 = graph.GetGraphIterator(u);
-                while ((lav = graph.NextNeighbor(it1)) != Graph.GraphNoNeighbor)
+                while ((lav = graph.NextNeighbor(ref it1)) != Graph.GraphNoNeighbor)
                 {
                     //Genbox: Inverted if-statement to reduce nesting
                     if (!graph.NodeIsCritical(lav) || !GetBit(visited, lav))
@@ -276,7 +276,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
             GraphIterator it = graph.GetGraphIterator(v);
             uint u; /* Auxiliary vertex */
 
-            while ((u = graph.NextNeighbor(it)) != Graph.GraphNoNeighbor)
+            while ((u = graph.NextNeighbor(ref it)) != Graph.GraphNoNeighbor)
             {
                 //Genbox: Inverted if-statement to reduce nesting
                 if (!graph.NodeIsCritical(u) || GetBit(visited, u))
@@ -300,7 +300,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
                     it1 = graph.GetGraphIterator(u);
                     collision = false;
 
-                    while ((lav = graph.NextNeighbor(it1)) != Graph.GraphNoNeighbor)
+                    while ((lav = graph.NextNeighbor(ref it1)) != Graph.GraphNoNeighbor)
                     {
                         //Genbox: Inverted if-statement to reduce nesting
                         if (!graph.NodeIsCritical(lav) || !GetBit(visited, lav))
@@ -337,7 +337,7 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
 
                 // Marking used edges...
                 it1 = graph.GetGraphIterator(u);
-                while ((lav = graph.NextNeighbor(it1)) != Graph.GraphNoNeighbor)
+                while ((lav = graph.NextNeighbor(ref it1)) != Graph.GraphNoNeighbor)
                 {
                     //Genbox: Inverted if-statement to reduce nesting
                     if (!graph.NodeIsCritical(lav) || !GetBit(visited, lav))
@@ -365,25 +365,33 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
         return unusedEdgeIndex;
     }
 
-    private void Traverse(Graph graph, uint[] g, byte[] usedEdges, uint v, ref uint unusedEdgeIndex, byte[] visited)
+    private void Traverse(Graph graph, uint[] g, byte[] usedEdges, uint startVertex, ref uint unusedEdgeIndex, byte[] visited)
     {
-        GraphIterator it = graph.GetGraphIterator(v);
+        // Iterative DFS to avoid stack overflow on large inputs
+        Stack<uint> stack = new Stack<uint>();
+        stack.Push(startVertex);
 
-        uint neighbor;
-        while ((neighbor = graph.NextNeighbor(it)) != Graph.GraphNoNeighbor)
+        while (stack.Count > 0)
         {
-            if (GetBit(visited, neighbor))
-                continue;
+            uint v = stack.Pop();
+            GraphIterator it = graph.GetGraphIterator(v);
 
-            LogVisitingNeighbor(neighbor);
+            uint neighbor;
+            while ((neighbor = graph.NextNeighbor(ref it)) != Graph.GraphNoNeighbor)
+            {
+                if (GetBit(visited, neighbor))
+                    continue;
 
-            unusedEdgeIndex = NextUnusedEdge(usedEdges, unusedEdgeIndex);
-            g[neighbor] = unusedEdgeIndex - g[v];
+                LogVisitingNeighbor(neighbor);
 
-            SetBit(visited, neighbor);
-            unusedEdgeIndex++;
+                unusedEdgeIndex = NextUnusedEdge(usedEdges, unusedEdgeIndex);
+                g[neighbor] = unusedEdgeIndex - g[v];
 
-            Traverse(graph, g, usedEdges, neighbor, ref unusedEdgeIndex, visited);
+                SetBit(visited, neighbor);
+                unusedEdgeIndex++;
+
+                stack.Push(neighbor);
+            }
         }
     }
 

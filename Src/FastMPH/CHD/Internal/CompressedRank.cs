@@ -1,3 +1,4 @@
+using System.Numerics;
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
 
@@ -25,7 +26,7 @@ internal sealed class CompressedRank : IPackable
         uint i, j;
         _valsRemsCount = num;
         _maxVal = valsTable[_valsRemsCount - 1];
-        _remR = (uint)Math.Log(_maxVal / _valsRemsCount, 2);
+        _remR = _maxVal / _valsRemsCount == 0 ? 0 : (uint)BitOperations.Log2(_maxVal / _valsRemsCount);
 
         if (_remR == 0)
             _remR = 1;

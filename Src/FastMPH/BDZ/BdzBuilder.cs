@@ -74,7 +74,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         }
 
         uint indexInRank = 1U << settings.NumBitsOfKey;
-        uint[] rankTable = RankingStep(lookupTable, indexInRank, (uint)Math.Ceiling(numVertices / (float)indexInRank));
+        uint[] rankTable = RankingStep(lookupTable, indexInRank, (uint)Math.Ceiling(numVertices / (double)indexInRank));
         LogRankTable(rankTable);
         LogSuccess(seed, numPartitions);
 
@@ -119,7 +119,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
 
     private static byte[] Optimize(byte[] lookupTable, uint numVertices)
     {
-        uint newSize = (uint)Math.Ceiling(numVertices / 5.0f);
+        uint newSize = (uint)Math.Ceiling(numVertices / 5.0);
         byte[] newLookup = new byte[newSize];
 
         for (uint i = 0; i < numVertices; i++)
@@ -393,7 +393,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
             Edges = new Edge[numEdges];
             VertexDegree = new byte[numVertices];
             FirstEdge = new uint[numVertices];
-            Array.Fill<uint>(FirstEdge, 0xff);
+            Array.Fill(FirstEdge, NullEdge);
         }
 
         internal void AddEdge(uint v0, uint v1, uint v2)
@@ -453,7 +453,7 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
 
         public void Clear()
         {
-            Array.Fill<uint>(FirstEdge, 0xff);
+            Array.Fill(FirstEdge, NullEdge);
             Array.Fill<byte>(VertexDegree, 0);
             NumEdges = 0;
         }

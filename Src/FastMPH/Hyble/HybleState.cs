@@ -40,10 +40,6 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     /// <summary>
     /// Compute the index from a pre-hashed value.
     /// </summary>
-    /// <param name="hash">Hash of the key. Only the lower 32 bits are used.</param>
-    /// <summary>
-    /// Compute the index from a pre-hashed value.
-    /// </summary>
     /// <param name="hash">Hash of the key.</param>
     public uint SearchHash(ulong hash)
     {

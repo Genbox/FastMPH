@@ -16,7 +16,7 @@ public sealed partial class HybleBuilder<TKey> where TKey : notnull
     private partial void LogBucketFailure(int bucket, int size);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Successfully created Hyble with seed {seed}. capacity={capacity}")]
-    private partial void LogSuccess(ulong seed, uint capacity);
+    private partial void LogSuccess(ulong seed, int capacity);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Failed to create Hyble")]
     private partial void LogFailure();

@@ -131,8 +131,10 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
             bitsetStarts.Add((uint)bitsetWords.Count);
             rankStarts.Add((uint)rankPrefixes.Count);
 
-            bitsetWords.AddRange(seen);
-            AppendRankPrefixes(seen, rankPrefixes);
+            for (int i = 0; i < wordCount; i++)
+                bitsetWords.Add(seen[i]);
+
+            AppendRankPrefixes(seen, wordCount, rankPrefixes);
 
             offset += (uint)placed;
             remainingCount = nextCount;
@@ -195,11 +197,11 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
         return domainFloat <= (uint.MaxValue - 31.0);
     }
 
-    private static void AppendRankPrefixes(uint[] bitsetWords, List<uint> rankPrefixes)
+    private static void AppendRankPrefixes(uint[] bitsetWords, int wordCount, List<uint> rankPrefixes)
     {
         uint sum = 0;
 
-        for (int i = 0; i < bitsetWords.Length; i++)
+        for (int i = 0; i < wordCount; i++)
         {
             if ((i % RankSampleWords) == 0)
                 rankPrefixes.Add(sum);

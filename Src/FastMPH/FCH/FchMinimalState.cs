@@ -67,10 +67,7 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         sw.WriteDouble(P2);
         sw.WriteUInt64(Seed0);
         sw.WriteUInt64(Seed1);
-        sw.WriteUInt32((uint)LookupTable.Length);
-
-        foreach (uint t in LookupTable)
-            sw.WriteUInt32(t);
+        sw.WriteUInt32Array(LookupTable);
     }
 
     /// <summary>
@@ -87,12 +84,7 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         double p2 = sr.ReadDouble();
         ulong seed0 = sr.ReadUInt64();
         ulong seed1 = sr.ReadUInt64();
-        uint length = sr.ReadUInt32();
-
-        uint[] lookupTable = new uint[length];
-
-        for (int i = 0; i < length; i++)
-            lookupTable[i] = sr.ReadUInt32();
+        uint[] lookupTable = sr.ReadUInt32Array();
 
         return new FchMinimalState<TKey>(numItems, b, p1, p2, seed0, seed1, lookupTable, HashHelper.GetHashFunc(hashFunc));
     }

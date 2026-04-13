@@ -53,10 +53,7 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(NumVertices);
         sw.WriteUInt64(Seed);
-        sw.WriteUInt32((uint)LookupTable.Length);
-
-        foreach (uint t in LookupTable)
-            sw.WriteUInt32(t);
+        sw.WriteUInt32Array(LookupTable);
     }
 
     /// <summary>
@@ -69,12 +66,7 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         SpanReader sw = new SpanReader(packed);
         uint numVertices = sw.ReadUInt32();
         ulong seed = sw.ReadUInt64();
-        uint length = sw.ReadUInt32();
-
-        uint[] lookupTable = new uint[length];
-
-        for (int i = 0; i < length; i++)
-            lookupTable[i] = sw.ReadUInt32();
+        uint[] lookupTable = sw.ReadUInt32Array();
 
         return new BmzMinimalState<TKey>(numVertices, seed, lookupTable, HashHelper.GetHashFunc(hashFunc));
     }

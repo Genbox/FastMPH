@@ -43,5 +43,32 @@ internal ref struct SpanReader(ReadOnlySpan<byte> span)
         return value;
     }
 
+    public uint[] ReadUInt32Array()
+    {
+        uint length = ReadUInt32();
+        uint[] values = new uint[length];
+        for (int i = 0; i < length; i++)
+            values[i] = ReadUInt32();
+        return values;
+    }
+
+    public byte[] ReadByteArray()
+    {
+        uint length = ReadUInt32();
+        byte[] values = new byte[length];
+        for (int i = 0; i < length; i++)
+            values[i] = ReadByte();
+        return values;
+    }
+
+    public ushort[] ReadUInt16Array()
+    {
+        uint length = ReadUInt32();
+        ushort[] values = new ushort[length];
+        for (int i = 0; i < length; i++)
+            values[i] = ReadUInt16();
+        return values;
+    }
+
     public readonly int BytesRead() => _org.Length - _span.Length;
 }

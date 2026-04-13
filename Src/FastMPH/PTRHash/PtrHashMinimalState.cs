@@ -130,15 +130,8 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
         sw.WriteUInt32(BucketsPerPart);
         sw.WriteByte((byte)BucketFunction);
         sw.WriteUInt64(Seed);
-        sw.WriteUInt32((uint)Pilots.Length);
-
-        foreach (byte pilot in Pilots)
-            sw.WriteByte(pilot);
-
-        sw.WriteUInt32((uint)Remap.Length);
-
-        foreach (uint value in Remap)
-            sw.WriteUInt32(value);
+        sw.WriteByteArray(Pilots);
+        sw.WriteUInt32Array(Remap);
     }
 
     /// <summary>
@@ -156,16 +149,8 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
         uint bucketsPerPart = sr.ReadUInt32();
         PtrHashBucketFunction bucketFunction = (PtrHashBucketFunction)sr.ReadByte();
         ulong seed = sr.ReadUInt64();
-        uint pilotsLength = sr.ReadUInt32();
-
-        byte[] pilots = new byte[pilotsLength];
-        for (int i = 0; i < pilotsLength; i++)
-            pilots[i] = sr.ReadByte();
-
-        uint remapLength = sr.ReadUInt32();
-        uint[] remap = new uint[remapLength];
-        for (int i = 0; i < remapLength; i++)
-            remap[i] = sr.ReadUInt32();
+        byte[] pilots = sr.ReadByteArray();
+        uint[] remap = sr.ReadUInt32Array();
 
         return new PtrHashMinimalState<TKey>(numKeys, numSlots, numParts, slotsPerPart, bucketsPerPart, bucketFunction, seed, pilots, remap, HashHelper.GetHashFunc(hashFunc));
     }

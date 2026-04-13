@@ -58,17 +58,9 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         sw.WriteUInt64(Seed);
         sw.WriteUInt32(NumPartitions);
 
-        sw.WriteUInt32((uint)RankTable.Length);
-
-        foreach (uint u in RankTable)
-            sw.WriteUInt32(u);
-
+        sw.WriteUInt32Array(RankTable);
         sw.WriteByte(BitsOfKey);
-
-        sw.WriteUInt32((uint)LookupTable.Length);
-
-        foreach (byte b in LookupTable)
-            sw.WriteByte(b);
+        sw.WriteByteArray(LookupTable);
     }
 
     /// <inheritdoc />
@@ -97,19 +89,9 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         ulong seed = sr.ReadUInt64();
         uint numPartitions = sr.ReadUInt32();
 
-        uint rankTableLength = sr.ReadUInt32();
-
-        uint[] rankTable = new uint[rankTableLength];
-        for (int i = 0; i < rankTableLength; i++)
-            rankTable[i] = sr.ReadUInt32();
-
+        uint[] rankTable = sr.ReadUInt32Array();
         byte numBitsOfKey = sr.ReadByte();
-
-        uint lookupTableLength = sr.ReadUInt32();
-        byte[] lookupTable = new byte[lookupTableLength];
-
-        for (int i = 0; i < lookupTableLength; i++)
-            lookupTable[i] = sr.ReadByte();
+        byte[] lookupTable = sr.ReadByteArray();
 
         return new BdzMinimalState<TKey>(numPartitions, lookupTable, seed, numBitsOfKey, rankTable, HashHelper.GetHashFunc3(hashFunc));
     }

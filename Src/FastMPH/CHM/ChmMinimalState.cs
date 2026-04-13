@@ -59,10 +59,7 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         sw.WriteUInt32(NumVertices);
         sw.WriteUInt32(NumEdges);
         sw.WriteUInt64(Seed);
-        sw.WriteUInt32((uint)LookupTable.Length);
-
-        foreach (uint t in LookupTable)
-            sw.WriteUInt32(t);
+        sw.WriteUInt32Array(LookupTable);
     }
 
     /// <summary>
@@ -76,12 +73,7 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         uint numVertices = sw.ReadUInt32();
         uint numEdges = sw.ReadUInt32();
         ulong seed = sw.ReadUInt64();
-        uint length = sw.ReadUInt32();
-
-        uint[] lookupTable = new uint[length];
-
-        for (int i = 0; i < length; i++)
-            lookupTable[i] = sw.ReadUInt32();
+        uint[] lookupTable = sw.ReadUInt32Array();
 
         return new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed, HashHelper.GetHashFunc(hashFunc));
     }

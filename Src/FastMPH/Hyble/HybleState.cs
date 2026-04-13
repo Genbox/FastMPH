@@ -70,10 +70,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt32(ApproxRange);
         sw.WriteUInt64(Seed);
-        sw.WriteUInt32((uint)Displacements.Length);
-
-        foreach (ushort displacement in Displacements)
-            sw.WriteUInt16(displacement);
+        sw.WriteUInt16Array(Displacements);
     }
 
     /// <summary>
@@ -86,11 +83,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
         SpanReader sr = new SpanReader(packed);
         uint approxRange = sr.ReadUInt32();
         ulong seed = sr.ReadUInt64();
-        int displacementLength = (int)sr.ReadUInt32();
-        ushort[] displacements = new ushort[displacementLength];
-
-        for (int i = 0; i < displacements.Length; i++)
-            displacements[i] = sr.ReadUInt16();
+        ushort[] displacements = sr.ReadUInt16Array();
 
         if (!IsValidState(displacements))
             throw new InvalidOperationException("Packed Hyble state invariants are invalid");

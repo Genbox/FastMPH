@@ -117,12 +117,12 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
         sw.WriteUInt32(NumKeys);
         sw.WriteUInt64(Seed);
 
-        WriteUInt32Array(ref sw, Domains);
-        WriteUInt32Array(ref sw, Offsets);
-        WriteUInt32Array(ref sw, BitsetStarts);
-        WriteUInt32Array(ref sw, RankStarts);
-        WriteUInt32Array(ref sw, BitsetWords);
-        WriteUInt32Array(ref sw, RankPrefixes);
+        sw.WriteUInt32Array(Domains);
+        sw.WriteUInt32Array(Offsets);
+        sw.WriteUInt32Array(BitsetStarts);
+        sw.WriteUInt32Array(RankStarts);
+        sw.WriteUInt32Array(BitsetWords);
+        sw.WriteUInt32Array(RankPrefixes);
     }
 
     /// <summary>
@@ -136,32 +136,13 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
         uint numKeys = sr.ReadUInt32();
         ulong seed = sr.ReadUInt64();
 
-        uint[] domains = ReadUInt32Array(ref sr);
-        uint[] offsets = ReadUInt32Array(ref sr);
-        uint[] bitsetStarts = ReadUInt32Array(ref sr);
-        uint[] rankStarts = ReadUInt32Array(ref sr);
-        uint[] bitsetWords = ReadUInt32Array(ref sr);
-        uint[] rankPrefixes = ReadUInt32Array(ref sr);
+        uint[] domains = sr.ReadUInt32Array();
+        uint[] offsets = sr.ReadUInt32Array();
+        uint[] bitsetStarts = sr.ReadUInt32Array();
+        uint[] rankStarts = sr.ReadUInt32Array();
+        uint[] bitsetWords = sr.ReadUInt32Array();
+        uint[] rankPrefixes = sr.ReadUInt32Array();
 
         return new BbHashMinimalState<TKey>(numKeys, seed, domains, offsets, bitsetStarts, rankStarts, bitsetWords, rankPrefixes, HashHelper.GetHashFunc(hashFunc));
-    }
-
-    private static void WriteUInt32Array(ref SpanWriter sw, uint[] values)
-    {
-        sw.WriteUInt32((uint)values.Length);
-
-        foreach (uint value in values)
-            sw.WriteUInt32(value);
-    }
-
-    private static uint[] ReadUInt32Array(ref SpanReader sr)
-    {
-        uint length = sr.ReadUInt32();
-        uint[] values = new uint[length];
-
-        for (int i = 0; i < length; i++)
-            values[i] = sr.ReadUInt32();
-
-        return values;
     }
 }

@@ -75,10 +75,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
         sw.WriteUInt32(NumBuckets);
         sw.WriteUInt32(NumBins);
         sw.WriteUInt32(NumKeys);
-        sw.WriteUInt32((uint)OccupTable.Length);
-
-        foreach (byte b in OccupTable)
-            sw.WriteByte(b);
+        sw.WriteByteArray(OccupTable);
 
         _cs.Pack(sw);
     }
@@ -95,12 +92,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
         uint numBuckets = sr.ReadUInt32();
         uint numBins = sr.ReadUInt32();
         uint numKeys = sr.ReadUInt32();
-        uint length = sr.ReadUInt32();
-
-        byte[] occupTable = new byte[length];
-
-        for (int i = 0; i < length; i++)
-            occupTable[i] = sr.ReadByte();
+        byte[] occupTable = sr.ReadByteArray();
 
         CompressedSequence cs = CompressedSequence.Unpack(sr);
         return new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, HashHelper.GetHashFunc3(hashFunc));

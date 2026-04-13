@@ -56,10 +56,7 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt64(Seed);
         sw.WriteUInt32(NumPartitions);
-        sw.WriteUInt32((uint)LookupTable.Length);
-
-        foreach (byte b in LookupTable)
-            sw.WriteByte(b);
+        sw.WriteByteArray(LookupTable);
     }
 
     /// <inheritdoc />
@@ -85,11 +82,7 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
         ulong seed = sr.ReadUInt64();
         uint numPartitions = sr.ReadUInt32();
 
-        uint lookupTableLength = sr.ReadUInt32();
-        byte[] lookupTable = new byte[lookupTableLength];
-
-        for (int i = 0; i < lookupTableLength; i++)
-            lookupTable[i] = sr.ReadByte();
+        byte[] lookupTable = sr.ReadByteArray();
 
         return new BdzState<TKey>(numPartitions, lookupTable, seed, HashHelper.GetHashFunc3(hashFunc));
     }

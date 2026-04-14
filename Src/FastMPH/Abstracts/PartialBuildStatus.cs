@@ -1,10 +1,10 @@
 using JetBrains.Annotations;
 
-namespace Genbox.FastMPH.BBHash;
+namespace Genbox.FastMPH.Abstracts;
 
-/// <summary>Represents the result of a BBHash build.</summary>
+/// <summary>Represents the result of a partial hash build.</summary>
 [PublicAPI]
-public enum BbHashBuildStatus
+public enum PartialBuildStatus
 {
     /// <summary>All keys were mapped successfully.</summary>
     Success,

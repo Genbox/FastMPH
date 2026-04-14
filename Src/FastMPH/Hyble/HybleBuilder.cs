@@ -14,12 +14,27 @@ namespace Genbox.FastMPH.Hyble;
 /// This implementation assumes full-avalanche hash quality and uses a 32-bit seeded hash pipeline.
 /// </summary>
 [PublicAPI]
-public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<TKey>, HybleSettings> where TKey : notnull
+public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<TKey>, HybleSettings>, IPartialHashBuilder<TKey, HybleState<TKey>, HybleSettings> where TKey : notnull
 {
     private const uint MaxDisplacementBase = ushort.MaxValue - 64;
 
     /// <inheritdoc />
     public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out HybleState<TKey>? state, HybleSettings? settings = null)
+    {
+        PartialBuildStatus status = CreatePartial(keys, hashFunc, seed, out PartialBuildResult<TKey, HybleState<TKey>>? result, settings);
+
+        if (status == PartialBuildStatus.Success)
+        {
+            state = result!.State;
+            return true;
+        }
+
+        state = null;
+        return false;
+    }
+
+    /// <inheritdoc />
+    public PartialBuildStatus CreatePartial(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out PartialBuildResult<TKey, HybleState<TKey>>? result, HybleSettings? settings = null)
     {
         settings ??= new HybleSettings();
 
@@ -27,30 +42,31 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
 
         HybleBuildState buildState = new HybleBuildState();
 
-        return TryCreateCore(keys, hashCode, settings, seed, buildState, out state);
+        return CreatePartialCore(keys, hashCode, settings, seed, buildState, out result);
     }
 
-    private bool TryCreateCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, HybleSettings settings, ulong seed, HybleBuildState buildState, [NotNullWhen(true)]out HybleState<TKey>? state)
+    private PartialBuildStatus CreatePartialCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, HybleSettings settings, ulong seed, HybleBuildState buildState, out PartialBuildResult<TKey, HybleState<TKey>>? result)
     {
-        state = null;
+        result = null;
 
         // Keep the 32-bit data limitation explicit to match the Rust implementation.
         if (keys.Length > (int.MaxValue / 2))
-            return false;
+            return PartialBuildStatus.Failure;
 
         uint numKeys = (uint)keys.Length;
 
         if (numKeys == 0)
         {
-            state = new HybleState<TKey>(1, 0, [0], hashCode);
-            return true;
+            HybleState<TKey> emptyState = new HybleState<TKey>(1, 0, [0], hashCode);
+            result = new PartialBuildResult<TKey, HybleState<TKey>>(emptyState, new Dictionary<TKey, uint>());
+            return PartialBuildStatus.Success;
         }
 
         if (!TryComputeApproxRange(numKeys, out uint approxRange))
-            return false;
+            return PartialBuildStatus.Failure;
 
         if (!TryComputeBucketLayout(numKeys, settings.KeysPerBucket, out uint bucketCount, out uint bucketMask))
-            return false;
+            return PartialBuildStatus.Failure;
 
         LogCreating(numKeys, approxRange, bucketCount);
 
@@ -67,6 +83,7 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
         int[] bucketOffsets = buildState.BucketOffsets;
         int[] bucketKeyIndices = buildState.BucketKeyIndices;
         int[] bucketOrder = buildState.BucketOrder;
+        byte[] placedBuckets = buildState.PlacedBuckets;
         ushort[] displacements = buildState.Displacements;
         byte[] freeBitmap = buildState.FreeBitmap;
 
@@ -100,8 +117,10 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
         if (HasApproxCollision(bucketStarts, bucketCounts, bucketKeyIndices, approxs))
         {
             LogFailure();
-            state = null;
-            return false;
+
+            Array.Clear(displacements, 0, displacements.Length);
+            result = BuildPartialResult(keys, bucketsByKey, placedBuckets, approxRange, seed, displacements, hashCode);
+            return PartialBuildStatus.Partial;
         }
 
         Array.Sort(bucketOrder, (a, b) =>
@@ -111,6 +130,7 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
         });
 
         Array.Clear(displacements, 0, displacements.Length);
+        Array.Clear(placedBuckets, 0, placedBuckets.Length);
         for (int i = 0; i < freeBitmap.Length; i++)
             freeBitmap[i] = byte.MaxValue;
 
@@ -126,17 +146,41 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
             {
                 LogBucketFailure(bucket, size);
                 LogFailure();
-                state = null;
-                return false;
+
+                result = BuildPartialResult(keys, bucketsByKey, placedBuckets, approxRange, seed, displacements, hashCode);
+                return PartialBuildStatus.Partial;
             }
 
             displacements[bucket] = displacement;
+            placedBuckets[bucket] = 1;
             MarkBucketAsUsed(bucket, bucketStarts, bucketCounts, bucketKeyIndices, approxs, displacement, freeBitmap);
         }
 
-        state = new HybleState<TKey>(approxRange, seed, displacements, hashCode);
+        HybleState<TKey> state = new HybleState<TKey>(approxRange, seed, displacements, hashCode);
+        result = new PartialBuildResult<TKey, HybleState<TKey>>(state, new Dictionary<TKey, uint>());
         LogSuccess(seed, displacements.Length - 1);
-        return true;
+        return PartialBuildStatus.Success;
+    }
+
+    private static PartialBuildResult<TKey, HybleState<TKey>> BuildPartialResult(ReadOnlySpan<TKey> keys, int[] bucketsByKey, byte[] placedBuckets, uint approxRange, ulong seed, ushort[] displacements, HashCode<TKey> hashCode)
+    {
+        HybleState<TKey> state = new HybleState<TKey>(approxRange, seed, displacements, hashCode);
+
+        Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>();
+        uint remainderIndex = approxRange + ushort.MaxValue;
+
+        for (int i = 0; i < keys.Length; i++)
+        {
+            int bucket = bucketsByKey[i];
+
+            if (placedBuckets[bucket] != 0)
+                continue;
+
+            remainder[keys[i]] = remainderIndex;
+            remainderIndex++;
+        }
+
+        return new PartialBuildResult<TKey, HybleState<TKey>>(state, remainder);
     }
 
     private static bool HasApproxCollision(int[] bucketStarts, int[] bucketCounts, int[] bucketKeyIndices, uint[] approxs)
@@ -277,6 +321,7 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
         public int[] BucketOffsets = [];
         public int[] BucketKeyIndices = [];
         public int[] BucketOrder = [];
+        public byte[] PlacedBuckets = [];
         public ushort[] Displacements = [];
         public byte[] FreeBitmap = [];
 
@@ -293,6 +338,7 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
             ArrayEnsure.EnsureCapacity(ref BucketStarts, bucketCount + 1);
             ArrayEnsure.EnsureCapacity(ref BucketOffsets, bucketCount);
             ArrayEnsure.EnsureCapacity(ref BucketOrder, bucketCount);
+            ArrayEnsure.EnsureCapacity(ref PlacedBuckets, bucketCount);
             ArrayEnsure.EnsureCapacity(ref Displacements, bucketCount);
         }
 

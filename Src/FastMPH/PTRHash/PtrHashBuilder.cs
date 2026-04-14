@@ -10,20 +10,35 @@ namespace Genbox.FastMPH.PTRHash;
 /// A PTRHash-inspired minimal perfect hash implementation with bucket pilots.
 /// </summary>
 [PublicAPI]
-public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, PtrHashMinimalState<TKey>, PtrHashMinimalSettings> where TKey : notnull
+public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, PtrHashMinimalState<TKey>, PtrHashMinimalSettings>, IPartialHashBuilder<TKey, PtrHashMinimalState<TKey>, PtrHashMinimalSettings> where TKey : notnull
 {
     /// <inheritdoc />
     public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out PtrHashMinimalState<TKey>? state, PtrHashMinimalSettings? settings = null)
+    {
+        PartialBuildStatus status = CreatePartial(keys, hashFunc, seed, out PartialBuildResult<TKey, PtrHashMinimalState<TKey>>? result, settings);
+
+        if (status == PartialBuildStatus.Success)
+        {
+            state = result!.State;
+            return true;
+        }
+
+        state = null;
+        return false;
+    }
+
+    /// <inheritdoc />
+    public PartialBuildStatus CreatePartial(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out PartialBuildResult<TKey, PtrHashMinimalState<TKey>>? result, PtrHashMinimalSettings? settings = null)
     {
         settings ??= new PtrHashMinimalSettings();
 
         HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
         PtrHashBuildState buildState = new PtrHashBuildState();
 
-        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
+        return CreatePartialCore(keys, hashCode, settings, seed, buildState, out result);
     }
 
-    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, PtrHashMinimalSettings settings, ulong seed, PtrHashBuildState buildState, [NotNullWhen(true)]out PtrHashMinimalState<TKey>? state)
+    private PartialBuildStatus CreatePartialCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, PtrHashMinimalSettings settings, ulong seed, PtrHashBuildState buildState, out PartialBuildResult<TKey, PtrHashMinimalState<TKey>>? result)
     {
         LogCreating(keys.Length, settings.Alpha, settings.Lambda);
 
@@ -37,8 +52,8 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
 
         if (slotsPerPart > int.MaxValue / numParts || bucketsPerPart > int.MaxValue / numParts)
         {
-            state = null;
-            return false;
+            result = null;
+            return PartialBuildStatus.Failure;
         }
 
         uint numSlots = checked(slotsPerPart * numParts);
@@ -58,6 +73,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         int[] bucketKeyIndices = buildState.BucketKeyIndices;
         int[] bucketOrder = buildState.BucketOrder;
         int[] slotOwners = buildState.SlotOwners;
+        int[] bucketOwnedCounts = buildState.BucketOwnedCounts;
         byte[] pilots = buildState.Pilots;
         int[] recentBuckets = buildState.RecentBuckets;
 
@@ -162,13 +178,60 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
 
         if (failed)
         {
+            BuildBucketOwnedCounts(slotOwners, bucketOwnedCounts);
+
+            uint placedKeyCount = 0;
+            for (int i = 0; i < bucketCounts.Length; i++)
+            {
+                if (bucketCounts[i] == bucketOwnedCounts[i])
+                    placedKeyCount += (uint)bucketCounts[i];
+            }
+
+            for (int i = 0; i < slotOwners.Length; i++)
+            {
+                int owner = slotOwners[i];
+
+                if (owner < 0)
+                    continue;
+
+                if (bucketCounts[owner] != bucketOwnedCounts[owner])
+                    slotOwners[i] = -1;
+            }
+
+            uint[] partialRemap = BuildRemap(slotOwners, placedKeyCount, numSlots);
+            PtrHashMinimalState<TKey> partialState = new PtrHashMinimalState<TKey>(
+                placedKeyCount,
+                numSlots,
+                numParts,
+                slotsPerPart,
+                bucketsPerPart,
+                settings.BucketFunction,
+                seed,
+                pilots,
+                partialRemap,
+                hashCode);
+
+            Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>(keys.Length - (int)placedKeyCount);
+            uint remainderIndex = placedKeyCount;
+
+            for (int i = 0; i < keys.Length; i++)
+            {
+                int bucket = bucketByKey[i];
+
+                if (bucketCounts[bucket] == bucketOwnedCounts[bucket])
+                    continue;
+
+                remainder[keys[i]] = remainderIndex;
+                remainderIndex++;
+            }
+
             LogFailure();
-            state = null;
-            return false;
+            result = new PartialBuildResult<TKey, PtrHashMinimalState<TKey>>(partialState, remainder);
+            return PartialBuildStatus.Partial;
         }
 
         uint[] remap = BuildRemap(slotOwners, numKeys, numSlots);
-        state = new PtrHashMinimalState<TKey>(
+        PtrHashMinimalState<TKey> state = new PtrHashMinimalState<TKey>(
             numKeys,
             numSlots,
             numParts,
@@ -179,8 +242,23 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
             pilots,
             remap,
             hashCode);
+
+        result = new PartialBuildResult<TKey, PtrHashMinimalState<TKey>>(state, new Dictionary<TKey, uint>());
         LogSuccess(seed);
-        return true;
+        return PartialBuildStatus.Success;
+    }
+
+    private static void BuildBucketOwnedCounts(int[] slotOwners, int[] bucketOwnedCounts)
+    {
+        Array.Clear(bucketOwnedCounts, 0, bucketOwnedCounts.Length);
+
+        for (int i = 0; i < slotOwners.Length; i++)
+        {
+            int owner = slotOwners[i];
+
+            if (owner >= 0)
+                bucketOwnedCounts[owner]++;
+        }
     }
 
     private static bool TryPlaceBucket(
@@ -679,6 +757,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         public int[] BucketKeyIndices = [];
         public int[] BucketOrder = [];
         public int[] SlotOwners = [];
+        public int[] BucketOwnedCounts = [];
         public byte[] Pilots = [];
         public int[] RecentBuckets = [];
         public int[] CandidateSlots = [];
@@ -700,6 +779,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
             ArrayEnsure.EnsureCapacity(ref BucketStarts, numBuckets + 1);
             ArrayEnsure.EnsureCapacity(ref BucketOffsets, numBuckets);
             ArrayEnsure.EnsureCapacity(ref BucketOrder, numBuckets);
+            ArrayEnsure.EnsureCapacity(ref BucketOwnedCounts, numBuckets);
             ArrayEnsure.EnsureCapacity(ref Pilots, numBuckets);
         }
 

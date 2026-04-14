@@ -11,7 +11,7 @@ namespace Genbox.FastMPH.BBHash;
 /// BBHash is a scalable minimal perfect hash algorithm using a cascade of collision-free bitsets.
 /// </summary>
 [PublicAPI]
-public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHashMinimalState<TKey>, BbHashMinimalSettings> where TKey : notnull
+public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHashMinimalState<TKey>, BbHashMinimalSettings>, IPartialHashBuilder<TKey, BbHashMinimalState<TKey>, BbHashMinimalSettings> where TKey : notnull
 {
     private const int RankSampleBits = 512;
     private const int RankSampleWords = RankSampleBits / 32;
@@ -19,11 +19,11 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
     /// <inheritdoc />
     public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out BbHashMinimalState<TKey>? state, BbHashMinimalSettings? settings = null)
     {
-        BbHashBuildStatus status = CreateMinimalWithRemainder(keys, hashFunc, seed, out BbHashBuildResult<TKey>? result, settings);
+        PartialBuildStatus status = CreatePartial(keys, hashFunc, seed, out PartialBuildResult<TKey, BbHashMinimalState<TKey>>? result, settings);
 
-        if (status == BbHashBuildStatus.Success)
+        if (status == PartialBuildStatus.Success)
         {
-            state = result.State;
+            state = result!.State;
             return true;
         }
 
@@ -39,7 +39,7 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
     /// <param name="settings">Settings for this hash function.</param>
     /// <param name="result">Contains the constructed state and any remaining keys. Null on failure.</param>
     /// <returns>Success if all keys are mapped; Partial if some remain; Failure for invalid inputs.</returns>
-    public BbHashBuildStatus CreateMinimalWithRemainder(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out BbHashBuildResult<TKey>? result, BbHashMinimalSettings? settings = null)
+    public PartialBuildStatus CreatePartial(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out PartialBuildResult<TKey, BbHashMinimalState<TKey>>? result, BbHashMinimalSettings? settings = null)
     {
         settings ??= new BbHashMinimalSettings();
 
@@ -47,10 +47,10 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
 
         BbHashBuildState buildState = new BbHashBuildState();
 
-        return CreateMinimalWithRemainderCore(keys, hashCode, settings, seed, buildState, out result);
+        return CreatePartialCore(keys, hashCode, settings, seed, buildState, out result);
     }
 
-    private BbHashBuildStatus CreateMinimalWithRemainderCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, BbHashMinimalSettings settings, ulong seed, BbHashBuildState buildState, out BbHashBuildResult<TKey>? result)
+    private PartialBuildStatus CreatePartialCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, BbHashMinimalSettings settings, ulong seed, BbHashBuildState buildState, out PartialBuildResult<TKey, BbHashMinimalState<TKey>>? result)
     {
         LogCreating(keys.Length, settings.Gamma, settings.MaxLevels);
 
@@ -73,7 +73,7 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
         if (!TryComputeInitialDomain(keys.Length, settings.Gamma, out double domainFloat))
         {
             result = null;
-            return BbHashBuildStatus.Failure;
+            return PartialBuildStatus.Failure;
         }
 
         double collisionProbability = ComputeCollisionProbability(keys.Length, settings.Gamma);
@@ -165,8 +165,8 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
             rankPrefixes: rankPrefixes.ToArray(),
             hashCode);
 
-        result = new BbHashBuildResult<TKey>(state, remainder);
-        return remainder.Count == 0 ? BbHashBuildStatus.Success : BbHashBuildStatus.Partial;
+        result = new PartialBuildResult<TKey, BbHashMinimalState<TKey>>(state, remainder);
+        return remainder.Count == 0 ? PartialBuildStatus.Success : PartialBuildStatus.Partial;
     }
 
     private sealed class BbHashBuildState

@@ -19,10 +19,25 @@ namespace Genbox.FastMPH.CHD;
 /// </list>
 /// </summary>
 [PublicAPI]
-public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMinimalState<TKey>, ChdMinimalSettings>, IHashBuilder<TKey, ChdState<TKey>, ChdSettings> where TKey : notnull
+public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMinimalState<TKey>, ChdMinimalSettings>, IHashBuilder<TKey, ChdState<TKey>, ChdSettings>, IPartialHashBuilder<TKey, ChdState<TKey>, ChdSettings> where TKey : notnull
 {
     /// <inheritdoc />
     public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out ChdState<TKey>? state, ChdSettings? settings = null)
+    {
+        PartialBuildStatus status = CreatePartial(keys, hashFunc, seed, out PartialBuildResult<TKey, ChdState<TKey>>? result, settings);
+
+        if (status == PartialBuildStatus.Success)
+        {
+            state = result!.State;
+            return true;
+        }
+
+        state = null;
+        return false;
+    }
+
+    /// <inheritdoc />
+    public PartialBuildStatus CreatePartial(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out PartialBuildResult<TKey, ChdState<TKey>>? result, ChdSettings? settings = null)
     {
         settings ??= new ChdSettings();
 
@@ -30,10 +45,10 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
         ChdBuildState buildState = new ChdBuildState();
 
-        return TryCreateCore(keys, hashCode, settings, seed, buildState, out state);
+        return CreatePartialCore(keys, hashCode, settings, seed, buildState, out result);
     }
 
-    private bool TryCreateCore(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, ChdSettings settings, ulong seed, ChdBuildState buildState, [NotNullWhen(true)]out ChdState<TKey>? state)
+    private PartialBuildStatus CreatePartialCore(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, ChdSettings settings, ulong seed, ChdBuildState buildState, out PartialBuildResult<TKey, ChdState<TKey>>? result)
     {
 
         uint numKeys = (uint)keys.Length;
@@ -72,17 +87,21 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         byte[] occupTable = buildState.OccupTable;
         uint[] dispTable = buildState.DispTable;
         MapItem[] mapItems = buildState.MapItems;
+        byte[] placedBuckets = buildState.PlacedBuckets;
 
         Array.Clear(occupTable, 0, (int)size);
         Array.Clear(dispTable, 0, (int)numBuckets);
+        Array.Clear(placedBuckets, 0, (int)numBuckets);
 
         LogMappingStep(numKeys, numBins);
 
         if (!Mapping(mapItems, numKeys, numBins, numBuckets, keys, hashCode, buckets, items, seed, out uint maxBucketSize))
         {
             LogFailed();
-            state = null;
-            return false;
+
+            ChdState<TKey> failedState = BuildState(hashCode, seed, numBuckets, numBins, numKeys, occupTable, dispTable);
+            result = BuildFullRemainderResult(keys, failedState, numBins);
+            return PartialBuildStatus.Partial;
         }
 
         LogOrderingStep();
@@ -91,19 +110,21 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
         LogSearchingStep();
 
-        if (!Searching(settings.UseHeuristics, settings.KeysPerBin, occupTable, numBins, buckets, items, maxBucketSize, sortedLists, maxProbes, dispTable))
+        if (!Searching(settings.UseHeuristics, settings.KeysPerBin, occupTable, numBins, buckets, items, maxBucketSize, sortedLists, maxProbes, dispTable, placedBuckets))
         {
             LogFailed();
-            state = null;
-            return false;
+
+            ChdState<TKey> partialState = BuildState(hashCode, seed, numBuckets, numBins, numKeys, occupTable, dispTable);
+            result = BuildPartialRemainderResult(keys, mapItems, placedBuckets, partialState, numBins);
+            return PartialBuildStatus.Partial;
         }
 
         LogCompressingStep();
-        CompressedSequence cs = new CompressedSequence(dispTable, numBuckets);
+        ChdState<TKey> state = BuildState(hashCode, seed, numBuckets, numBins, numKeys, occupTable, dispTable);
 
         LogSuccess(seed);
-        state = new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, hashCode);
-        return true;
+        result = new PartialBuildResult<TKey, ChdState<TKey>>(state, new Dictionary<TKey, uint>());
+        return PartialBuildStatus.Success;
     }
 
     /// <inheritdoc />
@@ -120,11 +141,13 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
     private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, ChdMinimalSettings settings, ulong seed, ChdBuildState buildState, [NotNullWhen(true)]out ChdMinimalState<TKey>? state)
     {
 
-        if (!TryCreateCore(keys, hashCode, settings, seed, buildState, out ChdState<TKey>? phState))
+        if (CreatePartialCore(keys, hashCode, settings, seed, buildState, out PartialBuildResult<TKey, ChdState<TKey>>? result) != PartialBuildStatus.Success)
         {
             state = null;
             return false;
         }
+
+        ChdState<TKey> phState = result!.State;
 
         uint numBins = phState.NumBins;
         uint numKeys = phState.NumKeys;
@@ -143,6 +166,43 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         CompressedRank cr = new CompressedRank(valsTable, numValues);
         state = new ChdMinimalState<TKey>(phState, cr);
         return true;
+    }
+
+    private static ChdState<TKey> BuildState(HashCode3<TKey> hashCode, ulong seed, uint numBuckets, uint numBins, uint numKeys, byte[] occupTable, uint[] dispTable)
+    {
+        CompressedSequence cs = new CompressedSequence(dispTable, numBuckets);
+        return new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, hashCode);
+    }
+
+    private static PartialBuildResult<TKey, ChdState<TKey>> BuildFullRemainderResult(ReadOnlySpan<TKey> keys, ChdState<TKey> state, uint numBins)
+    {
+        Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>(keys.Length);
+        uint remainderIndex = numBins;
+
+        for (int i = 0; i < keys.Length; i++)
+        {
+            remainder[keys[i]] = remainderIndex;
+            remainderIndex++;
+        }
+
+        return new PartialBuildResult<TKey, ChdState<TKey>>(state, remainder);
+    }
+
+    private static PartialBuildResult<TKey, ChdState<TKey>> BuildPartialRemainderResult(ReadOnlySpan<TKey> keys, MapItem[] mapItems, byte[] placedBuckets, ChdState<TKey> state, uint numBins)
+    {
+        Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>();
+        uint remainderIndex = numBins;
+
+        for (int i = 0; i < keys.Length; i++)
+        {
+            if (placedBuckets[mapItems[i].BucketNum] != 0)
+                continue;
+
+            remainder[keys[i]] = remainderIndex;
+            remainderIndex++;
+        }
+
+        return new PartialBuildResult<TKey, ChdState<TKey>>(state, remainder);
     }
 
     private static bool Mapping<T>(MapItem[] mapItems, uint numKeys, uint numBins, uint numBuckets, ReadOnlySpan<T> keys, HashCode3<T> hashCode, Bucket[] buckets, Item[] items, ulong seed, out uint maxBucketSize)
@@ -267,15 +327,15 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         return sortedLists;
     }
 
-    private bool Searching(bool useHeuristics, byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxBucketSize, SortedList[] sortedLists, uint maxProbes, uint[] dispTable)
+    private bool Searching(bool useHeuristics, byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxBucketSize, SortedList[] sortedLists, uint maxProbes, uint[] dispTable, byte[] placedBuckets)
     {
         if (useHeuristics)
-            return PlaceBuckets2(keysPerBin, occupTable, numBins, buckets, items, maxBucketSize, sortedLists, maxProbes, dispTable);
+            return PlaceBuckets2(keysPerBin, occupTable, numBins, buckets, items, maxBucketSize, sortedLists, maxProbes, dispTable, placedBuckets);
 
-        return PlaceBuckets1(keysPerBin, occupTable, numBins, buckets, items, maxBucketSize, sortedLists, maxProbes, dispTable);
+        return PlaceBuckets1(keysPerBin, occupTable, numBins, buckets, items, maxBucketSize, sortedLists, maxProbes, dispTable, placedBuckets);
     }
 
-    private static bool PlaceBuckets1(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxBucketSize, SortedList[] sortedLists, uint maxProbes, uint[] dispTable)
+    private static bool PlaceBuckets1(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxBucketSize, SortedList[] sortedLists, uint maxProbes, uint[] dispTable, byte[] placedBuckets)
     {
         for (uint i = maxBucketSize; i > 0; i--)
         {
@@ -283,7 +343,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
 
             while (currBucket < sortedLists[i].Size + sortedLists[i].BucketList)
             {
-                if (!PlaceBucket(keysPerBin, occupTable, numBins, buckets, items, maxProbes, dispTable, currBucket, i))
+                if (!PlaceBucket(keysPerBin, occupTable, numBins, buckets, items, maxProbes, dispTable, placedBuckets, currBucket, i))
                     return false;
 
                 currBucket++;
@@ -292,7 +352,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         return true;
     }
 
-    private static bool PlaceBucket(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxProbes, uint[] dispTable, uint bucketNum, uint size)
+    private static bool PlaceBucket(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxProbes, uint[] dispTable, byte[] placedBuckets, uint bucketNum, uint size)
     {
         uint probe0Num = 0;
         uint probe1Num = 0;
@@ -303,6 +363,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
             if (PlaceBucketProbe(keysPerBin, occupTable, numBins, buckets, items, probe0Num, probe1Num, bucketNum, size))
             {
                 dispTable[buckets[bucketNum].BucketId] = probe0Num + (probe1Num * numBins);
+                placedBuckets[buckets[bucketNum].BucketId] = 1;
                 return true;
             }
             probe0Num++;
@@ -317,7 +378,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         }
     }
 
-    private bool PlaceBuckets2(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxBucketSize, SortedList[] sortedLists, uint maxProbes, uint[] dispTable)
+    private bool PlaceBuckets2(byte keysPerBin, byte[] occupTable, uint numBins, Bucket[] buckets, Item[] items, uint maxBucketSize, SortedList[] sortedLists, uint maxProbes, uint[] dispTable, byte[] placedBuckets)
     {
         uint i;
 
@@ -341,6 +402,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
                     if (PlaceBucketProbe(keysPerBin, occupTable, numBins, buckets, items, probe0Num, probe1Num, currBucket, i))
                     {
                         dispTable[buckets[currBucket].BucketId] = probe0Num + (probe1Num * numBins);
+                        placedBuckets[buckets[currBucket].BucketId] = 1;
                         LogDisplacement(currBucket, dispTable[currBucket]);
                     }
                     else
@@ -532,12 +594,14 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         public MapItem[] MapItems = [];
         public byte[] OccupTable = [];
         public uint[] DispTable = [];
+        public byte[] PlacedBuckets = [];
         public uint[] ValsTable = [];
 
         public void EnsureForBuckets(int numBuckets)
         {
             ArrayEnsure.EnsureCapacity(ref Buckets, numBuckets);
             ArrayEnsure.EnsureCapacity(ref DispTable, numBuckets);
+            ArrayEnsure.EnsureCapacity(ref PlacedBuckets, numBuckets);
         }
 
         public void EnsureForKeys(int numKeys)

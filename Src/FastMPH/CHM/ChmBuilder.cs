@@ -110,7 +110,7 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
 
         uint neighbor;
         bool isTraceEnabled = _logger.IsEnabled(LogLevel.Trace);
-        while ((neighbor = graph.NextNeighbor(it)) != Graph.GraphNoNeighbor)
+        while ((neighbor = graph.NextNeighbor(ref it)) != Graph.GraphNoNeighbor)
         {
             LogVisitingNeighbor(neighbor);
 

@@ -1,4 +1,5 @@
 using Genbox.FastMPH.BBHash;
+using Genbox.FastMPH.Abstracts;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Genbox.FastMPH.Tests;
@@ -17,9 +18,9 @@ public class BbHashTests
         // Force a collision by returning the same hash for both values
         Func<ulong, ulong> collidingHash = _ => 42UL;
 
-        BbHashBuildStatus status = builder.CreateMinimalWithRemainder(values, collidingHash, 0x517CC1B727220A95UL, out BbHashBuildResult<ulong>? result);
+        PartialBuildStatus status = builder.CreatePartial(values, collidingHash, 0x517CC1B727220A95UL, out PartialBuildResult<ulong, BbHashMinimalState<ulong>>? result);
 
-        Assert.Equal(BbHashBuildStatus.Partial, status);
+        Assert.Equal(PartialBuildStatus.Partial, status);
         Assert.NotNull(result);
         Assert.False(builder.TryCreateMinimalWithRetry(values, collidingHash, out _));
 
@@ -90,9 +91,9 @@ public class BbHashTests
         BbHashBuilder<int> builder = new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance);
         BbHashMinimalSettings settings = new BbHashMinimalSettings { MaxLevels = 0 };
 
-        BbHashBuildStatus status = builder.CreateMinimalWithRemainder(values, _intHash, 0x517CC1B727220A95UL, out BbHashBuildResult<int>? result, settings);
+        PartialBuildStatus status = builder.CreatePartial(values, _intHash, 0x517CC1B727220A95UL, out PartialBuildResult<int, BbHashMinimalState<int>>? result, settings);
 
-        Assert.Equal(BbHashBuildStatus.Partial, status);
+        Assert.Equal(PartialBuildStatus.Partial, status);
         Assert.NotNull(result);
         Assert.False(builder.TryCreateMinimalWithRetry(values, _intHash, out _, settings));
 
@@ -129,9 +130,9 @@ public class BbHashTests
         BbHashBuilder<int> builder = new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance);
         BbHashMinimalSettings settings = new BbHashMinimalSettings { Gamma = uint.MaxValue };
 
-        BbHashBuildStatus status = builder.CreateMinimalWithRemainder(values, _intHash, 0x517CC1B727220A95UL, out BbHashBuildResult<int>? result, settings);
+        PartialBuildStatus status = builder.CreatePartial(values, _intHash, 0x517CC1B727220A95UL, out PartialBuildResult<int, BbHashMinimalState<int>>? result, settings);
 
-        Assert.Equal(BbHashBuildStatus.Failure, status);
+        Assert.Equal(PartialBuildStatus.Failure, status);
         Assert.Null(result);
         Assert.False(builder.TryCreateMinimalWithRetry(values, _intHash, out _, settings));
     }

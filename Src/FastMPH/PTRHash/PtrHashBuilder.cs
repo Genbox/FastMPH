@@ -84,8 +84,8 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         for (int i = 0; i < keys.Length; i++)
         {
             ulong h = hashCode(keys[i], seed);
-            ulong highHash = Mix64(h ^ 0x9E3779B97F4A7C15UL);
-            ulong lowHash = Mix64(h + 0xD6E8FEB86659FD93UL);
+            ulong highHash = HashHelper.Mix64(h ^ 0x9E3779B97F4A7C15UL);
+            ulong lowHash = HashHelper.Mix64(h + 0xD6E8FEB86659FD93UL);
 
             lowHashes[i] = lowHash;
 
@@ -490,7 +490,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         uint startPilot = 0;
 
         if (settings.RandomizePilotSearchStart)
-            startPilot = (uint)(Mix64((uint)bucket ^ seed) % maxPilot);
+            startPilot = (uint)(HashHelper.Mix64((uint)bucket ^ seed) % maxPilot);
 
         int bucketSize = bucketCounts[bucket];
         int markId = 0;
@@ -731,19 +731,6 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         PtrHashBucketFunction.CubicEps => (Math.BigMul(Math.BigMul(hash, hash, out _), (hash >> 1) | (1UL << 63), out _) / 256UL * 255UL) + (hash / 256UL),
         _ => hash
     };
-
-    private static ulong Mix64(ulong x)
-    {
-        unchecked
-        {
-            x ^= x >> 33;
-            x *= 0xff51afd7ed558ccdUL;
-            x ^= x >> 33;
-            x *= 0xc4ceb9fe1a85ec53UL;
-            x ^= x >> 33;
-            return x;
-        }
-    }
 
     private static bool IsPowerOfTwo(uint value) => value != 0 && (value & (value - 1)) == 0;
 

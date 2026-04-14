@@ -154,8 +154,8 @@ public class IntBenchmarks
         yield return ["CHM_M", BitsPerItem(chmPre.GetPackedSize()), new CFunc(data => new ChmBuilder<int>(NullLogger<ChmBuilder<int>>.Instance).TryCreateMinimalWithRetry(data, _intHash, out _, new ChmMinimalSettings()))];
 
         // Omit due to limited size support
-        // Validator.RequireThat(new FchBuilder<int>(NullLogger<FchBuilder<int>>.Instance).TryCreateMinimalWithRetry(_data, _intHash, out FchMinimalState<int>? fchPre));
-        // yield return ["FCH_M", BitsPerItem(fchPre.GetPackedSize()), new CFunc(data => new FchBuilder<int>(NullLogger<FchBuilder<int>>.Instance).TryCreateMinimalWithRetry(data, _intHash, out _, new FchMinimalSettings()))];
+        Validator.RequireThat(new FchBuilder<int>(NullLogger<FchBuilder<int>>.Instance).TryCreateMinimalWithRetry(_data, _intHash, out FchMinimalState<int>? fchPre));
+        yield return ["FCH_M", BitsPerItem(fchPre.GetPackedSize()), new CFunc(data => new FchBuilder<int>(NullLogger<FchBuilder<int>>.Instance).TryCreateMinimalWithRetry(data, _intHash, out _, new FchMinimalSettings()))];
 
         Validator.RequireThat(new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance).TryCreateMinimalWithRetry(_data, _intHash, out BbHashMinimalState<int>? bbPre));
         yield return ["BB_M", BitsPerItem(bbPre.GetPackedSize()), new CFunc(data => new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance).TryCreateMinimalWithRetry(data, _intHash, out _, new BbHashMinimalSettings()))];
@@ -198,8 +198,8 @@ public class IntBenchmarks
         yield return ["CHM_M", BitsPerItem(chmState.GetPackedSize()), new QFunc(data => chmState.Search(data))];
 
         // Omit due to limited size support
-        // Validator.RequireThat(new FchBuilder<int>(NullLogger<FchBuilder<int>>.Instance).TryCreateMinimalWithRetry(_data, _intHash, out FchMinimalState<int>? fchState));
-        // yield return ["FCH_M", BitsPerItem(fchState.GetPackedSize()), new QFunc(data => fchState.Search(data))];
+        Validator.RequireThat(new FchBuilder<int>(NullLogger<FchBuilder<int>>.Instance).TryCreateMinimalWithRetry(_data, _intHash, out FchMinimalState<int>? fchState));
+        yield return ["FCH_M", BitsPerItem(fchState.GetPackedSize()), new QFunc(data => fchState.Search(data))];
 
         Validator.RequireThat(new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance).TryCreateMinimalWithRetry(_data, _intHash, out BbHashMinimalState<int>? bbState));
         yield return ["BB_M", BitsPerItem(bbState.GetPackedSize()), new QFunc(data => bbState.Search(data))];

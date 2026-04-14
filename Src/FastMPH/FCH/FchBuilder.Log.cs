@@ -33,9 +33,6 @@ public partial class FchBuilder<TKey> where TKey : notnull
     [LoggerMessage(Level = LogLevel.Trace, Message = "bucket {bucket} -- nkeys: {numKeys}")]
     private partial void LogBucket(int bucket, uint numKeys);
 
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Increasing current capacity {capacity} to {newCapacity}")]
-    private static partial void LogIncreasingCapacity(ILogger logger, uint capacity, uint newCapacity);
-
     [LoggerMessage(Level = LogLevel.Debug, Message = "Successfully created FCH with seeds {seed0}, {seed1}")]
     private partial void LogSuccess(ulong seed0, ulong seed1);
 }

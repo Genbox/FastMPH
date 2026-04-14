@@ -45,11 +45,12 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         uint b = CalculateB(settings.BitsPerKey, numItems);
         double p1 = CalculateP1(numItems);
         double p2 = CalculateP2(b);
+
         buildState.EnsureForLookup((int)b);
         uint[] lookupTable = buildState.LookupTable;
 
         LogMappingStep(seed0, b, p1, p2);
-        Buckets<TKey> buckets = Mapping(seed0, b, p1, p2, numItems, keys, hashCode);
+        Buckets<TKey> buckets = Mapping(seed0, b, (uint)p1, (uint)p2, numItems, keys, hashCode, buildState);
 
         LogOrderingStep();
         uint[] sortedIndexes = Ordering(buckets);
@@ -67,18 +68,28 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         return true;
     }
 
-    private Buckets<T> Mapping<T>(ulong seed, uint b, double p1, double p2, uint m, ReadOnlySpan<T> keys, HashCode<T> hashCode)
+    private static Buckets<T> Mapping<T>(ulong seed, uint b, uint p1, uint p2, uint m, ReadOnlySpan<T> keys, HashCode<T> hashCode, FchBuildState buildState)
     {
-        Buckets<T> buckets = new Buckets<T>(_logger, b);
+        buildState.EnsureForBucketByKey((int)m);
+        uint[] bucketByKey = buildState.BucketByKey;
 
+        Buckets<T> buckets = new Buckets<T>(b, m);
+
+        // First pass: count keys per bucket
         for (int i = 0; i < m; i++)
         {
-            T key = keys[i];
-            uint hashVal = (uint)hashCode(key, seed);
-            uint h1 = hashVal % m;
-            h1 = Mixh10h11h12(b, p1, p2, h1);
-            buckets.Insert(h1, key);
+            ulong hashVal = hashCode(keys[i], seed);
+            uint h1 = Mixh10h11h12(b, p1, p2, (uint)(HashHelper.Mix64(hashVal) % m));
+
+            bucketByKey[i] = h1;
+            buckets.IncrementSize(h1);
         }
+
+        buckets.ComputeStarts();
+
+        // Second pass: insert keys into bucket positions
+        for (int i = 0; i < m; i++)
+            buckets.Insert(bucketByKey[i], keys[i]);
 
         return buckets;
     }
@@ -136,8 +147,8 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
                 {
                     T key = buckets.GetKey(sortedIndexes[i], Index);
 
-                    uint hashVal = (uint)hashCode(key, seed);
-                    uint h2 = hashVal % m;
+                    ulong hashVal = hashCode(key, seed);
+                    uint h2 = (uint)(HashHelper.Mix64(hashVal) % m);
 
                     lookupTable[sortedIndexes[i]] = ((m + randomTable[filledCount + z]) - h2) % m;
 
@@ -150,8 +161,8 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
                     do
                     {
                         key = buckets.GetKey(sortedIndexes[i], j);
-                        uint hashVal2 = (uint)hashCode(key, seed);
-                        h2 = hashVal2 % m;
+                        ulong hashVal2 = hashCode(key, seed);
+                        h2 = (uint)(HashHelper.Mix64(hashVal2) % m);
                         uint index = (h2 + lookupTable[sortedIndexes[i]]) % m;
 
                         LogSearchStatus2(index, h2, bucketSize);
@@ -189,16 +200,21 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
 
     internal static uint Mixh10h11h12(uint b, double p1, double p2, uint initialIndex)
     {
-        uint intP2 = (uint)p2;
+        return Mixh10h11h12(b, (uint)p1, (uint)p2, initialIndex);
+    }
 
+    internal static uint Mixh10h11h12(uint b, uint p1, uint p2, uint initialIndex)
+    {
         if (initialIndex < p1)
-            initialIndex %= intP2; /* h11 o h10 */
+            initialIndex %= p2; /* h11 o h10 */
         else
         {
             /* h12 o h10 */
             initialIndex %= b;
-            if (initialIndex < p2) initialIndex += intP2;
+            if (initialIndex < p2)
+                initialIndex += p2;
         }
+
         return initialIndex;
     }
 
@@ -226,8 +242,8 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
             for (uint j = 0; j < numKeys; j++)
             {
                 T key = buckets.GetKey(sortedIndexes[i], j);
-                uint hashVal = (uint)hashCode(key, seed);
-                uint index = hashVal % m;
+                ulong hashVal = hashCode(key, seed);
+                uint index = (uint)(HashHelper.Mix64(hashVal) % m);
 
                 if (stampTable[index] == stamp)
                     return true; // collision detected
@@ -244,6 +260,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         public uint[] RandomTable = [];
         public uint[] MapTable = [];
         public byte[] StampTable = [];
+        public uint[] BucketByKey = [];
 
         public void EnsureForLookup(int size)
         {
@@ -261,6 +278,11 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         public void EnsureForHashTable(int size)
         {
             ArrayEnsure.EnsureCapacity(ref StampTable, size);
+        }
+
+        public void EnsureForBucketByKey(int size)
+        {
+            ArrayEnsure.EnsureCapacity(ref BucketByKey, size);
         }
     }
 
@@ -287,70 +309,60 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         return state;
     }
 
-    private sealed class Bucket<T>(ILogger logger)
-    {
-        private uint _capacity;
-        private T[] _entries = new T[1];
-        private uint _size;
-
-        private void Reserve(uint size)
-        {
-            if (_capacity < size)
-            {
-                uint newCapacity = _capacity + 1;
-                LogIncreasingCapacity(logger, _capacity, size);
-
-                while (newCapacity < size)
-                    newCapacity *= 2;
-
-                Array.Resize(ref _entries, (int)newCapacity);
-                _capacity = newCapacity;
-            }
-        }
-
-        public void Insert(T val)
-        {
-            Reserve(_size + 1);
-            _entries[_size] = val;
-            ++_size;
-        }
-
-        public uint GetSize() => _size;
-
-        public T GetKey(uint indexKey) => _entries[indexKey];
-    }
-
     private sealed class Buckets<T>
     {
         private readonly uint _numBuckets;
-        private readonly Bucket<T>[] _values;
+        private readonly uint[] _bucketSizes;
+        private readonly uint[] _bucketStarts;
+        private readonly T[] _keys;
         private uint _maxSize;
 
-        public Buckets(ILogger logger, uint numBuckets)
+        public Buckets(uint numBuckets, uint numKeys)
         {
-            uint i;
-
-            _values = new Bucket<T>[numBuckets];
-
-            for (i = 0; i < numBuckets; i++)
-                _values[i] = new Bucket<T>(logger);
-
             _numBuckets = numBuckets;
+            _bucketSizes = new uint[numBuckets];
+            _bucketStarts = new uint[numBuckets];
+            _keys = new T[numKeys];
             _maxSize = 0;
         }
 
-        public void Insert(uint index, T key)
+        /// <summary>First pass: count keys per bucket.</summary>
+        public void IncrementSize(uint index)
         {
-            Bucket<T> bucket = _values[index];
-            bucket.Insert(key);
+            _bucketSizes[index]++;
 
-            if (bucket.GetSize() > _maxSize)
-                _maxSize = bucket.GetSize();
+            if (_bucketSizes[index] > _maxSize)
+                _maxSize = _bucketSizes[index];
         }
 
-        public uint GetSize(uint index) => _values[index].GetSize();
+        /// <summary>After counting, compute prefix sums and prepare for insertion.</summary>
+        public void ComputeStarts()
+        {
+            uint offset = 0;
+            for (uint i = 0; i < _numBuckets; i++)
+            {
+                _bucketStarts[i] = offset;
+                offset += _bucketSizes[i];
+            }
 
-        public T GetKey(uint index, uint indexKey) => _values[index].GetKey(indexKey);
+            // Reset sizes (will be used as insertion counters)
+            Array.Clear(_bucketSizes, 0, (int)_numBuckets);
+        }
+
+        /// <summary>Second pass: insert keys into their bucket positions.</summary>
+        public void Insert(uint index, T key)
+        {
+            uint pos = _bucketStarts[index] + _bucketSizes[index];
+            _keys[pos] = key;
+            _bucketSizes[index]++;
+
+            if (_bucketSizes[index] > _maxSize)
+                _maxSize = _bucketSizes[index];
+        }
+
+        public uint GetSize(uint index) => _bucketSizes[index];
+
+        public T GetKey(uint index, uint indexKey) => _keys[_bucketStarts[index] + indexKey];
 
         public uint GetNumBuckets() => _numBuckets;
 
@@ -362,7 +374,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
             // collect how many buckets for each size.
             int i;
             for (i = 0; i < (int)_numBuckets; i++)
-                nbucketsSize[_values[i].GetSize()]++;
+                nbucketsSize[_bucketSizes[i]]++;
 
             // calculating offset considering a decreasing order of buckets size.
             uint value = nbucketsSize[_maxSize];
@@ -378,8 +390,8 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
 
             for (i = 0; i < (int)_numBuckets; i++)
             {
-                sortedIndexes[nbucketsSize[_values[i].GetSize()]] = (uint)i;
-                nbucketsSize[_values[i].GetSize()]++;
+                sortedIndexes[nbucketsSize[_bucketSizes[i]]] = (uint)i;
+                nbucketsSize[_bucketSizes[i]]++;
             }
             return sortedIndexes;
         }

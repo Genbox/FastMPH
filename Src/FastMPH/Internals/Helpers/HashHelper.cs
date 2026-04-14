@@ -33,4 +33,18 @@ internal static class HashHelper
             return h;
         }
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static ulong Mix64(ulong x)
+    {
+        unchecked
+        {
+            x ^= x >> 33;
+            x *= 0xff51afd7ed558ccdUL;
+            x ^= x >> 33;
+            x *= 0xc4ceb9fe1a85ec53UL;
+            x ^= x >> 33;
+            return x;
+        }
+    }
 }

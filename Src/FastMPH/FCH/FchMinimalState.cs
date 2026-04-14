@@ -41,8 +41,8 @@ public sealed class FchMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        uint h1 = (uint)_hashCode(key, Seed0) % NumItems;
-        uint h2 = (uint)_hashCode(key, Seed1) % NumItems;
+        uint h1 = (uint)(HashHelper.Mix64(_hashCode(key, Seed0)) % NumItems);
+        uint h2 = (uint)(HashHelper.Mix64(_hashCode(key, Seed1)) % NumItems);
         h1 = FchBuilder<TKey>.Mixh10h11h12(B, P1, P2, h1);
         return (h2 + LookupTable[h1]) % NumItems;
     }

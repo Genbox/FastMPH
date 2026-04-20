@@ -10,142 +10,106 @@ namespace Genbox.FastMPH.PTRHash;
 /// A PTRHash-inspired minimal perfect hash implementation with bucket pilots.
 /// </summary>
 [PublicAPI]
-public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, PtrHashMinimalState<TKey>, PtrHashMinimalSettings>, IPartialHashBuilder<TKey, PtrHashMinimalState<TKey>, PtrHashMinimalSettings> where TKey : notnull
+public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, PtrHashMinimalState<TKey>, PtrHashMinimalSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out PtrHashMinimalState<TKey>? state, PtrHashMinimalSettings? settings = null)
-    {
-        PartialBuildStatus status = CreatePartial(keys, hashFunc, seed, out PartialBuildResult<TKey, PtrHashMinimalState<TKey>>? result, settings);
-
-        if (status == PartialBuildStatus.Success)
-        {
-            state = result!.State;
-            return true;
-        }
-
-        state = null;
-        return false;
-    }
-
-    /// <inheritdoc />
-    public PartialBuildStatus CreatePartial(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out PartialBuildResult<TKey, PtrHashMinimalState<TKey>>? result, PtrHashMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out PtrHashMinimalState<TKey>? state, PtrHashMinimalSettings? settings = null)
     {
         settings ??= new PtrHashMinimalSettings();
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
-        PtrHashBuildState buildState = new PtrHashBuildState();
-
-        return CreatePartialCore(keys, hashCode, settings, seed, buildState, out result);
-    }
-
-    private PartialBuildStatus CreatePartialCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, PtrHashMinimalSettings settings, ulong seed, PtrHashBuildState buildState, out PartialBuildResult<TKey, PtrHashMinimalState<TKey>>? result)
-    {
-        LogCreating(keys.Length, settings.Alpha, settings.Lambda);
-
-        uint numKeys = (uint)keys.Length;
-        uint numParts = ComputeParts(numKeys, settings);
-        uint slotsPerPart = Math.Max(1u, (uint)Math.Ceiling(numKeys / (settings.Alpha * numParts)));
-        if (IsPowerOfTwo(slotsPerPart))
-            slotsPerPart++;
-
-        uint bucketsPerPart = Math.Max(1u, (uint)Math.Ceiling(numKeys / (settings.Lambda * numParts))) + 3u;
-
-        if (slotsPerPart > int.MaxValue / numParts || bucketsPerPart > int.MaxValue / numParts)
+        if (!TryCreateMinimalState(keys.Length, settings, out IBuildState? buildState))
         {
-            result = null;
-            return PartialBuildStatus.Failure;
+            state = null;
+            return false;
         }
 
-        uint numSlots = checked(slotsPerPart * numParts);
-        uint numBuckets = checked(bucketsPerPart * numParts);
-        ulong slotMultiplier = ComputeFastModMultiplier(slotsPerPart);
+        ulong seed = RandomHelper.Next64();
+        return TryCreateMinimalCore(keys, hashFunc, seed, buildState, settings, out state);
+    }
 
-        buildState.EnsureForKeys(keys.Length);
-        buildState.EnsureForBuckets((int)numBuckets);
-        buildState.EnsureForSlots((int)numSlots);
-        buildState.EnsureForEviction(settings.RecentEvictionWindow);
+    /// <inheritdoc />
+    public bool TryCreateMinimalState(int numKeys, PtrHashMinimalSettings settings, [NotNullWhen(true)]out IBuildState? state)
+    {
+        if (!BuildState.TryCreate(numKeys, settings, out BuildState? typed))
+        {
+            state = null;
+            return false;
+        }
 
-        ulong[] lowHashes = buildState.LowHashes;
-        int[] bucketByKey = buildState.BucketByKey;
-        int[] bucketCounts = buildState.BucketCounts;
-        int[] bucketStarts = buildState.BucketStarts;
-        int[] bucketOffsets = buildState.BucketOffsets;
-        int[] bucketKeyIndices = buildState.BucketKeyIndices;
-        int[] bucketOrder = buildState.BucketOrder;
-        int[] slotOwners = buildState.SlotOwners;
-        int[] bucketOwnedCounts = buildState.BucketOwnedCounts;
-        byte[] pilots = buildState.Pilots;
-        int[] recentBuckets = buildState.RecentBuckets;
+        state = typed;
+        return true;
+    }
 
-        Array.Clear(bucketCounts, 0, bucketCounts.Length);
+    /// <inheritdoc />
+    public bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, PtrHashMinimalSettings settings, [NotNullWhen(true)]out PtrHashMinimalState<TKey>? queryState)
+    {
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
+
+        build.Reset();
+        LogCreating(keys.Length, settings.Alpha, settings.Lambda);
 
         bool linearBuckets = settings.BucketFunction == PtrHashBucketFunction.Linear;
 
+        Array.Clear(build.BucketStarts, 0, build.BucketStarts.Length);
+
         for (int i = 0; i < keys.Length; i++)
         {
-            ulong h = hashCode(keys[i], seed);
+            ulong h = hashFunc(keys[i], seed);
             ulong highHash = HashHelper.Mix64(h ^ 0x9E3779B97F4A7C15UL);
             ulong lowHash = HashHelper.Mix64(h + 0xD6E8FEB86659FD93UL);
 
-            lowHashes[i] = lowHash;
+            build.LowHashes[i] = lowHash;
 
             uint bucket;
             if (linearBuckets)
             {
-                bucket = HashHelper.Reduce64(highHash, numBuckets);
+                bucket = HashHelper.Reduce64(highHash, build.NumBuckets);
             }
             else
             {
-                (uint part, ulong remainder) = ReduceWithRemainder(highHash, numParts);
-                uint bucketInPart = HashHelper.Reduce64(ApplyBucketFunction(remainder, settings.BucketFunction), bucketsPerPart);
-                bucket = (part * bucketsPerPart) + bucketInPart;
+                (uint part, ulong remainder) = ReduceWithRemainder(highHash, build.NumParts);
+                uint bucketInPart = HashHelper.Reduce64(ApplyBucketFunction(remainder, settings.BucketFunction), build.BucketsPerPart);
+                bucket = (part * build.BucketsPerPart) + bucketInPart;
             }
 
-            bucketByKey[i] = (int)bucket;
-            bucketCounts[(int)bucket]++;
+            build.BucketByKey[i] = (int)bucket;
+            build.BucketCounts[(int)bucket]++;
         }
 
         int maxBucketSize = 0;
-        bucketStarts[0] = 0;
+        build.BucketStarts[0] = 0;
 
-        for (int i = 0; i < bucketCounts.Length; i++)
+        for (int i = 0; i < build.BucketCounts.Length; i++)
         {
-            int count = bucketCounts[i];
+            int count = build.BucketCounts[i];
             if (count > maxBucketSize)
                 maxBucketSize = count;
 
-            bucketStarts[i + 1] = bucketStarts[i] + count;
-            bucketOffsets[i] = bucketStarts[i];
-            bucketOrder[i] = i;
+            build.BucketStarts[i + 1] = build.BucketStarts[i] + count;
+            build.BucketOffsets[i] = build.BucketStarts[i];
+            build.BucketOrder[i] = i;
         }
 
-        buildState.EnsureForCandidates(maxBucketSize);
-
-        int[] candidateSlots = buildState.CandidateSlots;
-        int[] bestSlots = buildState.BestSlots;
-        int[] collidedBuckets = buildState.CollidedBuckets;
-        int[] bestCollidedBuckets = buildState.BestCollidedBuckets;
-        int[] slotMarks = buildState.SlotMarks;
+        build.EnsureForCandidates(maxBucketSize);
 
         for (int i = 0; i < keys.Length; i++)
         {
-            int bucket = bucketByKey[i];
-            int offset = bucketOffsets[bucket]++;
-            bucketKeyIndices[offset] = i;
+            int bucket = build.BucketByKey[i];
+            int offset = build.BucketOffsets[bucket]++;
+            build.BucketKeyIndices[offset] = i;
         }
 
-        Array.Sort(bucketOrder, (a, b) => bucketCounts[b].CompareTo(bucketCounts[a]));
+        Array.Sort(build.BucketOrder, (a, b) => build.BucketCounts[b].CompareTo(build.BucketCounts[a]));
 
-        for (int i = 0; i < slotOwners.Length; i++)
-            slotOwners[i] = -1;
-        Array.Clear(pilots, 0, pilots.Length);
+        for (int i = 0; i < build.SlotOwners.Length; i++)
+            build.SlotOwners[i] = -1;
+        Array.Clear(build.Pilots, 0, build.Pilots.Length);
 
-        bool failed = false;
-
-        for (int order = 0; order < bucketOrder.Length; order++)
+        for (int order = 0; order < build.BucketOrder.Length; order++)
         {
-            int bucket = bucketOrder[order];
-            int bucketCount = bucketCounts[bucket];
+            int bucket = build.BucketOrder[order];
+            int bucketCount = build.BucketCounts[bucket];
 
             if (bucketCount == 0)
                 continue;
@@ -154,98 +118,37 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
                     bucket,
                     seed,
                     settings,
-                    bucketsPerPart,
-                    slotsPerPart,
-                    slotMultiplier,
-                    bucketStarts,
-                    bucketCounts,
-                    bucketKeyIndices,
-                    lowHashes,
-                    slotOwners,
-                    pilots,
-                    candidateSlots,
-                    bestSlots,
-                    collidedBuckets,
-                    bestCollidedBuckets,
-                    recentBuckets,
-                    slotMarks))
+                    build.EvictionQueue,
+                    build.BucketsPerPart,
+                    build.SlotsPerPart,
+                    build.SlotMultiplier,
+                    build.BucketStarts,
+                    build.BucketCounts,
+                    build.BucketKeyIndices,
+                    build.LowHashes,
+                    build.SlotOwners,
+                    build.Pilots,
+                    build.CandidateSlots,
+                    build.BestSlots,
+                    build.CollidedBuckets,
+                    build.BestCollidedBuckets,
+                    build.RecentBuckets,
+                    build.SlotMarks))
             {
                 LogBucketFailure(bucket, bucketCount);
-                failed = true;
-                break;
+                queryState = null;
+                return false;
             }
         }
 
-        if (failed)
-        {
-            BuildBucketOwnedCounts(slotOwners, bucketOwnedCounts);
+        uint[] remap = BuildRemap(build.SlotOwners, build.NumKeys, build.NumSlots);
+        byte[] pilots = GC.AllocateUninitializedArray<byte>(build.Pilots.Length);
+        Array.Copy(build.Pilots, pilots, pilots.Length);
 
-            uint placedKeyCount = 0;
-            for (int i = 0; i < bucketCounts.Length; i++)
-            {
-                if (bucketCounts[i] == bucketOwnedCounts[i])
-                    placedKeyCount += (uint)bucketCounts[i];
-            }
+        queryState = new PtrHashMinimalState<TKey>(build.NumKeys, build.NumSlots, build.NumParts, build.SlotsPerPart, build.BucketsPerPart, settings.BucketFunction, seed, pilots, remap, hashFunc);
 
-            for (int i = 0; i < slotOwners.Length; i++)
-            {
-                int owner = slotOwners[i];
-
-                if (owner < 0)
-                    continue;
-
-                if (bucketCounts[owner] != bucketOwnedCounts[owner])
-                    slotOwners[i] = -1;
-            }
-
-            uint[] partialRemap = BuildRemap(slotOwners, placedKeyCount, numSlots);
-            PtrHashMinimalState<TKey> partialState = new PtrHashMinimalState<TKey>(
-                placedKeyCount,
-                numSlots,
-                numParts,
-                slotsPerPart,
-                bucketsPerPart,
-                settings.BucketFunction,
-                seed,
-                pilots,
-                partialRemap,
-                hashCode);
-
-            Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>(keys.Length - (int)placedKeyCount);
-            uint remainderIndex = placedKeyCount;
-
-            for (int i = 0; i < keys.Length; i++)
-            {
-                int bucket = bucketByKey[i];
-
-                if (bucketCounts[bucket] == bucketOwnedCounts[bucket])
-                    continue;
-
-                remainder[keys[i]] = remainderIndex;
-                remainderIndex++;
-            }
-
-            LogFailure();
-            result = new PartialBuildResult<TKey, PtrHashMinimalState<TKey>>(partialState, remainder);
-            return PartialBuildStatus.Partial;
-        }
-
-        uint[] remap = BuildRemap(slotOwners, numKeys, numSlots);
-        PtrHashMinimalState<TKey> state = new PtrHashMinimalState<TKey>(
-            numKeys,
-            numSlots,
-            numParts,
-            slotsPerPart,
-            bucketsPerPart,
-            settings.BucketFunction,
-            seed,
-            pilots,
-            remap,
-            hashCode);
-
-        result = new PartialBuildResult<TKey, PtrHashMinimalState<TKey>>(state, new Dictionary<TKey, uint>());
         LogSuccess(seed);
-        return PartialBuildStatus.Success;
+        return true;
     }
 
     private static void BuildBucketOwnedCounts(int[] slotOwners, int[] bucketOwnedCounts)
@@ -265,6 +168,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         int initialBucket,
         ulong seed,
         PtrHashMinimalSettings settings,
+        PriorityQueue<int, int> evictionQueue,
         uint bucketsPerPart,
         uint slotsPerPart,
         ulong slotMultiplier,
@@ -305,7 +209,8 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         uint maxEvictions = settings.MaxEvictionsPerChain == 0 ? slotsPerPart * 10u : settings.MaxEvictionsPerChain;
         uint evictionCount = 0;
 
-        PriorityQueue<int, int> queue = new PriorityQueue<int, int>();
+        evictionQueue.Clear();
+        PriorityQueue<int, int> queue = evictionQueue;
         queue.Enqueue(initialBucket, -bucketCounts[initialBucket]);
 
         for (int i = 0; i < recentBuckets.Length; i++)
@@ -696,16 +601,119 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         return remap;
     }
 
-    private static uint ComputeParts(uint numKeys, PtrHashMinimalSettings settings)
+    private sealed class BuildState : IBuildState
     {
-        if (settings.Parts > 0)
-            return settings.Parts;
+        public ulong[] LowHashes = [];
+        public int[] BucketByKey = [];
+        public int[] BucketCounts = [];
+        public int[] BucketStarts = [];
+        public int[] BucketOffsets = [];
+        public int[] BucketKeyIndices = [];
+        public int[] BucketOrder = [];
+        public int[] SlotOwners = [];
+        public int[] BucketOwnedCounts = [];
+        public int[] RecentBuckets = [];
+        public int[] CandidateSlots = [];
+        public int[] BestSlots = [];
+        public int[] CollidedBuckets = [];
+        public int[] BestCollidedBuckets = [];
+        public int[] SlotMarks = [];
+        public PriorityQueue<int, int> EvictionQueue = new PriorityQueue<int, int>();
+        public ulong SlotMultiplier;
+        public uint NumBuckets;
+        public byte[] Pilots = [];
 
-        if (numKeys == 0)
-            return 1;
+        public uint NumKeys;
+        public uint NumSlots;
+        public uint NumParts;
+        public uint SlotsPerPart;
+        public uint BucketsPerPart;
 
-        double value = Math.Ceiling(numKeys / (double)settings.TargetKeysPerPart);
-        return Math.Max(1u, (uint)value);
+        public static bool TryCreate(int numKeys, PtrHashMinimalSettings settings, [NotNullWhen(true)]out BuildState? state)
+        {
+            uint numParts = ComputeParts((uint)numKeys, settings);
+            uint slotsPerPart = Math.Max(1u, (uint)Math.Ceiling(numKeys / (settings.Alpha * numParts)));
+            if (IsPowerOfTwo(slotsPerPart))
+                slotsPerPart++;
+
+            uint bucketsPerPart = Math.Max(1u, (uint)Math.Ceiling(numKeys / (settings.Lambda * numParts))) + 3u;
+
+            if (slotsPerPart > int.MaxValue / numParts || bucketsPerPart > int.MaxValue / numParts)
+            {
+                state = null;
+                return false;
+            }
+
+            uint numSlots = checked(slotsPerPart * numParts);
+            uint numBuckets = checked(bucketsPerPart * numParts);
+
+            state = new BuildState
+            {
+                NumKeys = (uint)numKeys,
+                NumSlots = numSlots,
+                NumParts = numParts,
+                SlotsPerPart = slotsPerPart,
+                BucketsPerPart = bucketsPerPart,
+                NumBuckets = numBuckets,
+                SlotMultiplier = ComputeFastModMultiplier(slotsPerPart),
+                LowHashes = GC.AllocateUninitializedArray<ulong>(numKeys),
+                BucketByKey = GC.AllocateUninitializedArray<int>(numKeys),
+                BucketKeyIndices = GC.AllocateUninitializedArray<int>(numKeys),
+                BucketCounts = GC.AllocateUninitializedArray<int>((int)numBuckets),
+                BucketStarts = GC.AllocateUninitializedArray<int>((int)numBuckets + 1),
+                BucketOffsets = GC.AllocateUninitializedArray<int>((int)numBuckets),
+                BucketOrder = GC.AllocateUninitializedArray<int>((int)numBuckets),
+                BucketOwnedCounts = GC.AllocateUninitializedArray<int>((int)numBuckets),
+                Pilots = GC.AllocateUninitializedArray<byte>((int)numBuckets),
+                SlotOwners = GC.AllocateUninitializedArray<int>((int)numSlots),
+                SlotMarks = GC.AllocateUninitializedArray<int>((int)numSlots),
+                RecentBuckets = GC.AllocateUninitializedArray<int>(settings.RecentEvictionWindow),
+                EvictionQueue = new PriorityQueue<int, int>(),
+                CandidateSlots = [],
+                BestSlots = [],
+                CollidedBuckets = [],
+                BestCollidedBuckets = []
+            };
+
+            return true;
+        }
+
+        public void EnsureForCandidates(int maxBucketSize)
+        {
+            ArrayEnsure.EnsureCapacity(ref CandidateSlots, maxBucketSize);
+            ArrayEnsure.EnsureCapacity(ref BestSlots, maxBucketSize);
+            ArrayEnsure.EnsureCapacity(ref CollidedBuckets, maxBucketSize);
+            ArrayEnsure.EnsureCapacity(ref BestCollidedBuckets, maxBucketSize);
+        }
+
+        public void Reset()
+        {
+            Array.Clear(BucketCounts, 0, BucketCounts.Length);
+            Array.Clear(BucketOffsets, 0, BucketOffsets.Length);
+            Array.Clear(BucketOwnedCounts, 0, BucketOwnedCounts.Length);
+            for (int i = 0; i < SlotOwners.Length; i++)
+                SlotOwners[i] = -1;
+            Array.Clear(Pilots, 0, Pilots.Length);
+            EvictionQueue.Clear();
+            for (int i = 0; i < RecentBuckets.Length; i++)
+                RecentBuckets[i] = -1;
+        }
+
+        private static uint ComputeParts(uint numKeys, PtrHashMinimalSettings settings)
+        {
+            if (settings.Parts > 0)
+                return settings.Parts;
+
+            if (numKeys == 0)
+                return 1;
+
+            double value = Math.Ceiling(numKeys / (double)settings.TargetKeysPerPart);
+            return Math.Max(1u, (uint)value);
+        }
+
+        private static ulong ComputeFastModMultiplier(uint range) => unchecked((ulong.MaxValue / range) + 1UL);
+
+        private static bool IsPowerOfTwo(uint value) => value != 0 && (value & (value - 1)) == 0;
     }
 
     private static (uint Reduced, ulong Remainder) ReduceWithRemainder(ulong hash, uint range)
@@ -713,8 +721,6 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         uint reduced = (uint)Math.BigMul(hash, range, out ulong remainder);
         return (reduced, remainder);
     }
-
-    private static ulong ComputeFastModMultiplier(uint range) => unchecked((ulong.MaxValue / range) + 1UL);
 
     private static uint ReduceFastMod32(ulong hash, uint range, ulong multiplier)
     {
@@ -731,62 +737,4 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         PtrHashBucketFunction.CubicEps => (Math.BigMul(Math.BigMul(hash, hash, out _), (hash >> 1) | (1UL << 63), out _) / 256UL * 255UL) + (hash / 256UL),
         _ => hash
     };
-
-    private static bool IsPowerOfTwo(uint value) => value != 0 && (value & (value - 1)) == 0;
-
-    private sealed class PtrHashBuildState
-    {
-        public ulong[] LowHashes = [];
-        public int[] BucketByKey = [];
-        public int[] BucketCounts = [];
-        public int[] BucketStarts = [];
-        public int[] BucketOffsets = [];
-        public int[] BucketKeyIndices = [];
-        public int[] BucketOrder = [];
-        public int[] SlotOwners = [];
-        public int[] BucketOwnedCounts = [];
-        public byte[] Pilots = [];
-        public int[] RecentBuckets = [];
-        public int[] CandidateSlots = [];
-        public int[] BestSlots = [];
-        public int[] CollidedBuckets = [];
-        public int[] BestCollidedBuckets = [];
-        public int[] SlotMarks = [];
-
-        public void EnsureForKeys(int numKeys)
-        {
-            ArrayEnsure.EnsureCapacity(ref LowHashes, numKeys);
-            ArrayEnsure.EnsureCapacity(ref BucketByKey, numKeys);
-            ArrayEnsure.EnsureCapacity(ref BucketKeyIndices, numKeys);
-        }
-
-        public void EnsureForBuckets(int numBuckets)
-        {
-            ArrayEnsure.EnsureCapacity(ref BucketCounts, numBuckets);
-            ArrayEnsure.EnsureCapacity(ref BucketStarts, numBuckets + 1);
-            ArrayEnsure.EnsureCapacity(ref BucketOffsets, numBuckets);
-            ArrayEnsure.EnsureCapacity(ref BucketOrder, numBuckets);
-            ArrayEnsure.EnsureCapacity(ref BucketOwnedCounts, numBuckets);
-            ArrayEnsure.EnsureCapacity(ref Pilots, numBuckets);
-        }
-
-        public void EnsureForSlots(int numSlots)
-        {
-            ArrayEnsure.EnsureCapacity(ref SlotOwners, numSlots);
-            ArrayEnsure.EnsureCapacity(ref SlotMarks, numSlots);
-        }
-
-        public void EnsureForEviction(int recentWindow)
-        {
-            ArrayEnsure.EnsureCapacity(ref RecentBuckets, recentWindow);
-        }
-
-        public void EnsureForCandidates(int maxBucketSize)
-        {
-            ArrayEnsure.EnsureCapacity(ref CandidateSlots, maxBucketSize);
-            ArrayEnsure.EnsureCapacity(ref BestSlots, maxBucketSize);
-            ArrayEnsure.EnsureCapacity(ref CollidedBuckets, maxBucketSize);
-            ArrayEnsure.EnsureCapacity(ref BestCollidedBuckets, maxBucketSize);
-        }
-    }
 }

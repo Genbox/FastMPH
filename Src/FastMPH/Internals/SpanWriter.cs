@@ -38,13 +38,6 @@ internal ref struct SpanWriter(Span<byte> span)
         _span = _span[sizeof(double)..];
     }
 
-    public void WriteUInt32Array(uint[] values)
-    {
-        WriteUInt32((uint)values.Length);
-        foreach (uint value in values)
-            WriteUInt32(value);
-    }
-
     public void WriteByteArray(byte[] values)
     {
         WriteUInt32((uint)values.Length);
@@ -57,6 +50,13 @@ internal ref struct SpanWriter(Span<byte> span)
         WriteUInt32((uint)values.Length);
         foreach (ushort value in values)
             WriteUInt16(value);
+    }
+
+    public void WriteUInt32Array(uint[] values)
+    {
+        WriteUInt32((uint)values.Length);
+        foreach (uint value in values)
+            WriteUInt32(value);
     }
 
     public readonly int BytesWritten() => _org.Length - _span.Length;

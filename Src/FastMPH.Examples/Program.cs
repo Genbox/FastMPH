@@ -1,5 +1,5 @@
-using Genbox.FastMPH;
 using Genbox.FastMPH.CHD;
+using Genbox.FastMPH.Internals;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Genbox.FastMPH.Examples;
@@ -18,7 +18,9 @@ internal static class Program
             "cow"
         ];
 
-        if (!builder.TryCreateMinimalWithRetry(data, value => unchecked((ulong)value.GetHashCode(StringComparison.Ordinal)), out ChdMinimalState<string>? state))
+        HashFunc<string> hashFunc = static (value, seed) => unchecked((ulong)value.GetHashCode(StringComparison.Ordinal) ^ seed);
+
+        if (!builder.TryCreateMinimalWithRetry(data, hashFunc, out ChdMinimalState<string>? state))
         {
             Console.WriteLine("Unable to create perfect hash function");
             return;

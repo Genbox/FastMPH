@@ -1,22 +1,21 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
-using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.BMZ;
 
-/// <summary>Contains the state of a BDZ minimal perfect hash function</summary>
+/// <summary>Contains the state of a BMZ minimal perfect hash function</summary>
 [PublicAPI]
-public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnull
+public sealed class BmzMinimalState<TKey> : IQueryState<TKey> where TKey : notnull
 {
-    private readonly HashCode<TKey> _hashCode;
+    private readonly HashFunc<TKey> _hashFunc;
 
-    internal BmzMinimalState(uint numVertices, ulong seed, uint[] lookupTable, HashCode<TKey> func)
+    internal BmzMinimalState(uint numVertices, ulong seed, uint[] lookupTable, HashFunc<TKey> hashFunc)
     {
-        _hashCode = func;
         NumVertices = numVertices;
         Seed = seed;
         LookupTable = lookupTable;
+        _hashFunc = hashFunc;
     }
 
     /// <summary>Contains the number of vertices in the graph</summary>
@@ -31,7 +30,7 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        ulong h = _hashCode(key, Seed);
+        ulong h = _hashFunc(key, Seed);
         uint h1 = (uint)h % NumVertices;
         uint h2 = (uint)(h >> 32) % NumVertices;
 
@@ -51,8 +50,8 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     public void Pack(Span<byte> buffer)
     {
         SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(NumVertices);
         sw.WriteUInt64(Seed);
+        sw.WriteUInt32(NumVertices);
         sw.WriteUInt32Array(LookupTable);
     }
 
@@ -60,14 +59,13 @@ public sealed class BmzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BmzMinimalState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static BmzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
+    public static BmzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, HashFunc<TKey> hashFunc)
     {
         SpanReader sw = new SpanReader(packed);
-        uint numVertices = sw.ReadUInt32();
         ulong seed = sw.ReadUInt64();
+        uint numVertices = sw.ReadUInt32();
         uint[] lookupTable = sw.ReadUInt32Array();
 
-        return new BmzMinimalState<TKey>(numVertices, seed, lookupTable, HashHelper.GetHashFunc(hashFunc));
+        return new BmzMinimalState<TKey>(numVertices, seed, lookupTable, hashFunc);
     }
 }

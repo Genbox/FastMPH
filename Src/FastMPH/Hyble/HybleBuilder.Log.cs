@@ -10,7 +10,7 @@ public sealed partial class HybleBuilder<TKey> where TKey : notnull
     public HybleBuilder(ILogger<HybleBuilder<TKey>> logger) => _logger = logger;
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Creating Hyble with {numKeys} keys. approxRange={approxRange} bucketCount={bucketCount}")]
-    private partial void LogCreating(uint numKeys, uint approxRange, uint bucketCount);
+    private partial void LogCreating(int numKeys, uint approxRange, uint bucketCount);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Failed placing bucket {bucket} of size {size}")]
     private partial void LogBucketFailure(int bucket, int size);

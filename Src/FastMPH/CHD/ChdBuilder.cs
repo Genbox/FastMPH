@@ -19,190 +19,152 @@ namespace Genbox.FastMPH.CHD;
 /// </list>
 /// </summary>
 [PublicAPI]
-public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMinimalState<TKey>, ChdMinimalSettings>, IHashBuilder<TKey, ChdState<TKey>, ChdSettings>, IPartialHashBuilder<TKey, ChdState<TKey>, ChdSettings> where TKey : notnull
+public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMinimalState<TKey>, ChdMinimalSettings>, IHashBuilder<TKey, ChdState<TKey>, ChdSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out ChdState<TKey>? state, ChdSettings? settings = null)
-    {
-        PartialBuildStatus status = CreatePartial(keys, hashFunc, seed, out PartialBuildResult<TKey, ChdState<TKey>>? result, settings);
-
-        if (status == PartialBuildStatus.Success)
-        {
-            state = result!.State;
-            return true;
-        }
-
-        state = null;
-        return false;
-    }
-
-    /// <inheritdoc />
-    public PartialBuildStatus CreatePartial(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out PartialBuildResult<TKey, ChdState<TKey>>? result, ChdSettings? settings = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out ChdState<TKey>? state, ChdSettings? settings = null)
     {
         settings ??= new ChdSettings();
 
-        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
-
-        ChdBuildState buildState = new ChdBuildState();
-
-        return CreatePartialCore(keys, hashCode, settings, seed, buildState, out result);
-    }
-
-    private PartialBuildStatus CreatePartialCore(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, ChdSettings settings, ulong seed, ChdBuildState buildState, out PartialBuildResult<TKey, ChdState<TKey>>? result)
-    {
-
-        uint numKeys = (uint)keys.Length;
-        uint numBuckets = (numKeys / settings.KeysPerBucket) + 1;
-
-        LogCreating(numKeys, numBuckets, settings.LoadFactor, settings.KeysPerBin, settings.KeysPerBucket);
-
-        uint numBins = (uint)(numKeys / (settings.KeysPerBin * settings.LoadFactor)) + 1;
-
-        //Round the number of bins to the prime immediately above
-        if (numBins % 2 == 0)
-            numBins++;
-
-        //Genbox: Made the method call the condition in the while
-        while (!MillerRabin.IsPrimeNumber(numBins))
-            numBins += 2; // just odd numbers can be primes for n > 2
-
-        uint maxProbes = (uint)(Math.Log(numKeys) / Math.Log(2) / 20);
-
-        const uint maxProbesDefault = 1 << 20; // default value for max_probes
-
-        if (maxProbes == 0)
-            maxProbes = maxProbesDefault;
-        else
-            maxProbes *= maxProbesDefault;
-
-        //Genbox: refactored this a bit
-        uint size = settings.KeysPerBin == 1 ? ((numBins + 31) / 32) * sizeof(uint) : numBins;
-
-        buildState.EnsureForBuckets((int)numBuckets);
-        buildState.EnsureForKeys((int)numKeys);
-        buildState.EnsureForOccup((int)size);
-
-        Bucket[] buckets = buildState.Buckets;
-        Item[] items = buildState.Items;
-        byte[] occupTable = buildState.OccupTable;
-        uint[] dispTable = buildState.DispTable;
-        MapItem[] mapItems = buildState.MapItems;
-        byte[] placedBuckets = buildState.PlacedBuckets;
-
-        Array.Clear(occupTable, 0, (int)size);
-        Array.Clear(dispTable, 0, (int)numBuckets);
-        Array.Clear(placedBuckets, 0, (int)numBuckets);
-
-        LogMappingStep(numKeys, numBins);
-
-        if (!Mapping(mapItems, numKeys, numBins, numBuckets, keys, hashCode, buckets, items, seed, out uint maxBucketSize))
-        {
-            LogFailed();
-
-            ChdState<TKey> failedState = BuildState(hashCode, seed, numBuckets, numBins, numKeys, occupTable, dispTable);
-            result = BuildFullRemainderResult(keys, failedState, numBins);
-            return PartialBuildStatus.Partial;
-        }
-
-        LogOrderingStep();
-
-        SortedList[] sortedLists = Ordering(ref buckets, ref items, numBuckets, numKeys, maxBucketSize);
-
-        LogSearchingStep();
-
-        if (!Searching(settings.UseHeuristics, settings.KeysPerBin, occupTable, numBins, buckets, items, maxBucketSize, sortedLists, maxProbes, dispTable, placedBuckets))
-        {
-            LogFailed();
-
-            ChdState<TKey> partialState = BuildState(hashCode, seed, numBuckets, numBins, numKeys, occupTable, dispTable);
-            result = BuildPartialRemainderResult(keys, mapItems, placedBuckets, partialState, numBins);
-            return PartialBuildStatus.Partial;
-        }
-
-        LogCompressingStep();
-        ChdState<TKey> state = BuildState(hashCode, seed, numBuckets, numBins, numKeys, occupTable, dispTable);
-
-        LogSuccess(seed);
-        result = new PartialBuildResult<TKey, ChdState<TKey>>(state, new Dictionary<TKey, uint>());
-        return PartialBuildStatus.Success;
-    }
-
-    /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out ChdMinimalState<TKey>? state, ChdMinimalSettings? settings = null)
-    {
-        settings ??= new ChdMinimalSettings();
-
-        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
-        ChdBuildState buildState = new ChdBuildState();
-
-        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
-    }
-
-    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, ChdMinimalSettings settings, ulong seed, ChdBuildState buildState, [NotNullWhen(true)]out ChdMinimalState<TKey>? state)
-    {
-
-        if (CreatePartialCore(keys, hashCode, settings, seed, buildState, out PartialBuildResult<TKey, ChdState<TKey>>? result) != PartialBuildStatus.Success)
+        if (!TryCreateState(keys.Length, settings, out IBuildState? buildState))
         {
             state = null;
             return false;
         }
 
-        ChdState<TKey> phState = result!.State;
+        ulong seed = RandomHelper.Next64();
+        return TryCreateCore(keys, hashFunc, seed, buildState, settings, out state);
+    }
 
-        uint numBins = phState.NumBins;
-        uint numKeys = phState.NumKeys;
-        uint numValues = numBins - numKeys;
+    /// <inheritdoc />
+    public bool TryCreateState(int numKeys, ChdSettings settings, [NotNullWhen(true)]out IBuildState? state)
+    {
+        if (!BuildState.TryCreate(numKeys, settings, out BuildState? typed))
+        {
+            state = null;
+            return false;
+        }
 
-        buildState.EnsureForVals((int)numValues);
-        uint[] valsTable = buildState.ValsTable;
-        Span<uint> occupTable = MemoryMarshal.Cast<byte, uint>(phState.OccupTable.AsSpan());
+        state = typed;
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryCreateCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, ChdSettings settings, [NotNullWhen(true)]out ChdState<TKey>? queryState)
+    {
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
+
+        LogCreating(build.NumKeys, build.NumBuckets, settings.LoadFactor, settings.KeysPerBin, settings.KeysPerBucket);
+
+        LogMappingStep(build.NumKeys, build.NumBins);
+
+        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
+
+        if (!TryCreateCoreInternal(keys, hashCode, hashFunc, seed, settings, build, out queryState))
+        {
+            return false;
+        }
+
+        LogSuccess(seed);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out ChdMinimalState<TKey>? state, ChdMinimalSettings? settings = null)
+    {
+        settings ??= new ChdMinimalSettings();
+
+        if (!TryCreateMinimalState(keys.Length, settings, out IBuildState? buildState))
+        {
+            state = null;
+            return false;
+        }
+
+        ulong seed = RandomHelper.Next64();
+        return TryCreateMinimalCore(keys, hashFunc, seed, buildState, settings, out state);
+    }
+
+    /// <inheritdoc />
+    public bool TryCreateMinimalState(int numKeys, ChdMinimalSettings settings, [NotNullWhen(true)]out IBuildState? state)
+    {
+        if (!BuildState.TryCreate(numKeys, settings, out BuildState? typed))
+        {
+            state = null;
+            return false;
+        }
+
+        state = typed;
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, ChdMinimalSettings settings, [NotNullWhen(true)]out ChdMinimalState<TKey>? queryState)
+    {
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
+
+        if (!TryCreateCoreInternal(keys, HashHelper.GetHashFunc3(hashFunc), hashFunc, seed, settings, build, out ChdState<TKey>? phState))
+        {
+            queryState = null;
+            return false;
+        }
+
+        uint numBins = build.NumBins;
+        uint numKeysU = build.NumKeys;
+        uint numValues = numBins - numKeysU;
+
+        Span<uint> occupTable = MemoryMarshal.Cast<byte, uint>(build.OccupTable.AsSpan());
 
         for (uint i = 0, idx = 0; i < numBins; i++)
         {
             if (!GetBit(occupTable, i))
-                valsTable[idx++] = i;
+                build.ValsTable[idx++] = i;
         }
 
-        CompressedRank cr = new CompressedRank(valsTable, numValues);
-        state = new ChdMinimalState<TKey>(phState, cr);
+        uint[] vals = GC.AllocateUninitializedArray<uint>((int)numValues);
+        Array.Copy(build.ValsTable, vals, (int)numValues);
+        queryState = new ChdMinimalState<TKey>(phState, new CompressedRank(vals, numValues));
         return true;
     }
 
-    private static ChdState<TKey> BuildState(HashCode3<TKey> hashCode, ulong seed, uint numBuckets, uint numBins, uint numKeys, byte[] occupTable, uint[] dispTable)
+    private bool TryCreateCoreInternal(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, HashFunc<TKey> hashFunc, ulong seed, ChdSettings settings, BuildState build, [NotNullWhen(true)]out ChdState<TKey>? queryState)
     {
-        CompressedSequence cs = new CompressedSequence(dispTable, numBuckets);
-        return new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, hashCode);
-    }
+        Array.Clear(build.OccupTable, 0, build.OccupTable.Length);
+        Array.Clear(build.DispTable, 0, build.DispTable.Length);
+        Array.Clear(build.PlacedBuckets, 0, build.PlacedBuckets.Length);
 
-    private static PartialBuildResult<TKey, ChdState<TKey>> BuildFullRemainderResult(ReadOnlySpan<TKey> keys, ChdState<TKey> state, uint numBins)
-    {
-        Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>(keys.Length);
-        uint remainderIndex = numBins;
-
-        for (int i = 0; i < keys.Length; i++)
+        if (!Mapping(build.MapItems, build.NumKeys, build.NumBins, build.NumBuckets, keys, hashCode, build.Buckets, build.Items, seed, out uint maxBucketSize))
         {
-            remainder[keys[i]] = remainderIndex;
-            remainderIndex++;
+            LogFailed();
+            queryState = null;
+            return false;
         }
 
-        return new PartialBuildResult<TKey, ChdState<TKey>>(state, remainder);
-    }
+        LogOrderingStep();
 
-    private static PartialBuildResult<TKey, ChdState<TKey>> BuildPartialRemainderResult(ReadOnlySpan<TKey> keys, MapItem[] mapItems, byte[] placedBuckets, ChdState<TKey> state, uint numBins)
-    {
-        Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>();
-        uint remainderIndex = numBins;
+        SortedList[] sortedLists = Ordering(ref build.Buckets, ref build.Items, build.NumBuckets, build.NumKeys, maxBucketSize);
 
-        for (int i = 0; i < keys.Length; i++)
+        LogSearchingStep();
+
+        if (!Searching(settings.UseHeuristics, settings.KeysPerBin, build.OccupTable, build.NumBins, build.Buckets, build.Items, maxBucketSize, sortedLists, build.MaxProbes, build.DispTable, build.PlacedBuckets))
         {
-            if (placedBuckets[mapItems[i].BucketNum] != 0)
-                continue;
-
-            remainder[keys[i]] = remainderIndex;
-            remainderIndex++;
+            LogFailed();
+            queryState = null;
+            return false;
         }
 
-        return new PartialBuildResult<TKey, ChdState<TKey>>(state, remainder);
+        LogCompressingStep();
+
+        byte[] occupTable = GC.AllocateUninitializedArray<byte>(build.OccupTable.Length);
+        Array.Copy(build.OccupTable, occupTable, occupTable.Length);
+
+        uint[] dispTable = GC.AllocateUninitializedArray<uint>(build.DispTable.Length);
+        Array.Copy(build.DispTable, dispTable, dispTable.Length);
+
+        CompressedSequence cs = new CompressedSequence(dispTable, build.NumBuckets);
+        queryState = new ChdState<TKey>(cs, build.NumBuckets, build.NumBins, build.NumKeys, seed, occupTable, hashFunc);
+        return true;
     }
 
     private static bool Mapping<T>(MapItem[] mapItems, uint numKeys, uint numBins, uint numBuckets, ReadOnlySpan<T> keys, HashCode3<T> hashCode, Bucket[] buckets, Item[] items, ulong seed, out uint maxBucketSize)
@@ -551,44 +513,14 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         return true;
     }
 
-    [StructLayout(LayoutKind.Auto)]
-    private struct Bucket
+    private sealed class BuildState : IBuildState
     {
-        public uint ItemsList; // offset
-        public uint Size;
+        private const uint MaxProbesDefault = 1 << 20;
 
-        [SuppressMessage("Minor Code Smell", "S2292:Trivial properties should be auto-implemented")]
-        public uint BucketId
-        {
-            get => Size;
-            set => Size = value;
-        }
-    }
-
-    [StructLayout(LayoutKind.Auto)]
-    private struct SortedList
-    {
-        public uint BucketList;
-        public uint Size;
-    }
-
-    [StructLayout(LayoutKind.Auto)]
-    private struct Item
-    {
-        public uint F;
-        public uint H;
-    }
-
-    [StructLayout(LayoutKind.Auto)]
-    private struct MapItem
-    {
-        public uint BucketNum;
-        public uint F;
-        public uint H;
-    }
-
-    private sealed class ChdBuildState
-    {
+        public uint NumKeys;
+        public uint NumBuckets;
+        public uint NumBins;
+        public uint MaxProbes;
         public Bucket[] Buckets = [];
         public Item[] Items = [];
         public MapItem[] MapItems = [];
@@ -597,95 +529,57 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         public byte[] PlacedBuckets = [];
         public uint[] ValsTable = [];
 
-        public void EnsureForBuckets(int numBuckets)
+        public static bool TryCreate(int keysLength, ChdSettings settings, [NotNullWhen(true)]out BuildState? state)
         {
-            ArrayEnsure.EnsureCapacity(ref Buckets, numBuckets);
-            ArrayEnsure.EnsureCapacity(ref DispTable, numBuckets);
-            ArrayEnsure.EnsureCapacity(ref PlacedBuckets, numBuckets);
-        }
+            uint numKeys = (uint)keysLength;
+            uint numBuckets = (numKeys / settings.KeysPerBucket) + 1;
+            uint numBins = (uint)(numKeys / (settings.KeysPerBin * settings.LoadFactor)) + 1;
 
-        public void EnsureForKeys(int numKeys)
-        {
-            ArrayEnsure.EnsureCapacity(ref Items, numKeys);
-            ArrayEnsure.EnsureCapacity(ref MapItems, numKeys);
-        }
+            if (numBins % 2 == 0)
+                numBins++;
 
-        public void EnsureForOccup(int occupSize)
-        {
-            ArrayEnsure.EnsureCapacity(ref OccupTable, occupSize);
-        }
+            while (!MillerRabin.IsPrimeNumber(numBins))
+                numBins += 2;
 
-        public void EnsureForVals(int numValues)
-        {
-            ArrayEnsure.EnsureCapacity(ref ValsTable, numValues);
-        }
-    }
+            uint maxProbes = (uint)(Math.Log(Math.Max(1u, numKeys)) / Math.Log(2) / 20);
 
-    private static class MillerRabin
-    {
-        public static bool IsPrimeNumber(ulong n)
-        {
-            if (n < 2)
-                return false;
+            if (maxProbes == 0)
+                maxProbes = MaxProbesDefault;
+            else
+                maxProbes *= MaxProbesDefault;
 
-            if (n == 2 || n == 3 || n == 5 || n == 7)
-                return true;
+            Bucket[] buckets = GC.AllocateUninitializedArray<Bucket>((int)numBuckets);
+            uint[] dispTable = GC.AllocateUninitializedArray<uint>((int)numBuckets);
+            byte[] placedBuckets = GC.AllocateUninitializedArray<byte>((int)numBuckets);
+            Item[] items = GC.AllocateUninitializedArray<Item>(keysLength);
+            MapItem[] mapItems = GC.AllocateUninitializedArray<MapItem>(keysLength);
+            byte[] occupTable = GC.AllocateUninitializedArray<byte>((int)(settings.KeysPerBin == 1 ? ((numBins + 31) / 32) * sizeof(uint) : numBins));
+            uint numValues = numBins > numKeys ? numBins - numKeys : 0;
+            uint[] valsTable = GC.AllocateUninitializedArray<uint>((int)numValues);
 
-            if (n % 2 == 0)
-                return false;
-            if (n % 3 == 0)
-                return false;
-            if (n % 5 == 0)
-                return false;
-            if (n % 7 == 0)
-                return false;
-
-            ulong s = 0;
-            ulong d = n - 1;
-
-            do
+            state = new BuildState
             {
-                s++;
-                d /= 2;
-            } while (d % 2 == 0);
+                NumKeys = numKeys,
+                NumBuckets = numBuckets,
+                NumBins = numBins,
+                MaxProbes = maxProbes,
+                Buckets = buckets,
+                DispTable = dispTable,
+                PlacedBuckets = placedBuckets,
+                Items = items,
+                MapItems = mapItems,
+                OccupTable = occupTable,
+                ValsTable = valsTable
+            };
 
-            ulong a = 2;
-            if (!CheckWitness(IntPow(a, d, n), n, s))
-                return false;
-            a = 7;
-            if (!CheckWitness(IntPow(a, d, n), n, s))
-                return false;
-            a = 61;
-            return CheckWitness(IntPow(a, d, n), n, s);
+            return true;
         }
 
-        private static ulong IntPow(ulong a, ulong d, ulong n)
+        public void Reset()
         {
-            ulong aPow = a;
-            ulong res = 1;
-            while (d > 0)
-            {
-                if ((d & 1) == 1)
-                    res = (res * aPow) % n;
-                aPow = (aPow * aPow) % n;
-                d /= 2;
-            }
-            return res;
-        }
-
-        private static bool CheckWitness(ulong aExpD, ulong n, ulong s)
-        {
-            ulong aExp = aExpD;
-            if (aExp == 1 || aExp == n - 1)
-                return true;
-
-            for (ulong i = 1; i < s; ++i)
-            {
-                aExp = (aExp * aExp) % n;
-                if (aExp == n - 1)
-                    return true;
-            }
-            return false;
+            Array.Clear(OccupTable, 0, OccupTable.Length);
+            Array.Clear(DispTable, 0, DispTable.Length);
+            Array.Clear(PlacedBuckets, 0, PlacedBuckets.Length);
         }
     }
 }

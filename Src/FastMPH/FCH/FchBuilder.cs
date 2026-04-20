@@ -1,10 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
-using Genbox.FastMPH.Internals.Compat;
 using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
-using Microsoft.Extensions.Logging;
 
 namespace Genbox.FastMPH.FCH;
 
@@ -25,54 +23,66 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
     private const ulong SeedStep = 0x9E3779B97F4A7C15UL;
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out FchMinimalState<TKey>? state, FchMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out FchMinimalState<TKey>? state, FchMinimalSettings? settings = null)
     {
         settings ??= new FchMinimalSettings();
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
+        if (!TryCreateMinimalState(keys.Length, settings, out IBuildState? buildState))
+        {
+            state = null;
+            return false;
+        }
 
-        FchBuildState buildState = new FchBuildState();
-
-        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
+        ulong seed = RandomHelper.Next64();
+        return TryCreateMinimalCore(keys, hashFunc, seed, buildState, settings, out state);
     }
 
-    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, FchMinimalSettings settings, ulong seed0, FchBuildState buildState, [NotNullWhen(true)]out FchMinimalState<TKey>? state)
+    /// <inheritdoc />
+    public bool TryCreateMinimalState(int numKeys, FchMinimalSettings settings, [NotNullWhen(true)]out IBuildState? state)
     {
-        uint numItems = (uint)keys.Length;
+        if (!BuildState.TryCreate(numKeys, settings, out BuildState? typed))
+        {
+            state = null;
+            return false;
+        }
 
-        LogCreating(numItems, settings.BitsPerKey);
+        state = typed;
+        return true;
+    }
 
-        uint b = CalculateB(settings.BitsPerKey, numItems);
-        double p1 = CalculateP1(numItems);
-        double p2 = CalculateP2(b);
+    /// <inheritdoc />
+    public bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, FchMinimalSettings settings, [NotNullWhen(true)]out FchMinimalState<TKey>? queryState)
+    {
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
 
-        buildState.EnsureForLookup((int)b);
-        uint[] lookupTable = buildState.LookupTable;
+        build.Reset();
+        LogCreating(build.NumItems, settings.BitsPerKey);
 
-        LogMappingStep(seed0, b, p1, p2);
-        Buckets<TKey> buckets = Mapping(seed0, b, (uint)p1, (uint)p2, numItems, keys, hashCode, buildState);
+        LogMappingStep(seed, build.B, build.P1, build.P2);
+        Buckets<TKey> buckets = Mapping(seed, build.B, build.P1, build.P2, build.NumItems, keys, hashFunc, build.BucketByKey);
 
         LogOrderingStep();
         uint[] sortedIndexes = Ordering(buckets);
 
         LogSearchingStep();
-        if (Searching(buckets, sortedIndexes, lookupTable, numItems, hashCode, seed0, settings.MaxSearchingIterations, settings.MaxSeedGenerationIterations, buildState, out ulong seed1))
+        if (Searching(buckets, sortedIndexes, build.LookupTable, build.NumItems, hashFunc, seed, settings.MaxSearchingIterations, settings.MaxSeedGenerationIterations, build.MapTable, build.RandomTable, build.StampTable, out ulong seed1))
         {
             LogFailed();
-            state = null;
+            queryState = null;
             return false;
         }
 
-        LogSuccess(seed0, seed1);
-        state = new FchMinimalState<TKey>(numItems, b, p1, p2, seed0, seed1, lookupTable, hashCode);
+        uint[] lookupTable = GC.AllocateUninitializedArray<uint>(build.LookupTable.Length);
+        Array.Copy(build.LookupTable, lookupTable, lookupTable.Length);
+
+        queryState = new FchMinimalState<TKey>(build.NumItems, build.B, build.P1, build.P2, seed, seed1, lookupTable, hashFunc);
+        LogSuccess(seed, seed1);
         return true;
     }
 
-    private static Buckets<T> Mapping<T>(ulong seed, uint b, uint p1, uint p2, uint m, ReadOnlySpan<T> keys, HashCode<T> hashCode, FchBuildState buildState)
+    private static Buckets<T> Mapping<T>(ulong seed, uint b, uint p1, uint p2, uint m, ReadOnlySpan<T> keys, HashFunc<T> hashCode, uint[] bucketByKey)
     {
-        buildState.EnsureForBucketByKey((int)m);
-        uint[] bucketByKey = buildState.BucketByKey;
-
         Buckets<T> buckets = new Buckets<T>(b, m);
 
         // First pass: count keys per bucket
@@ -96,11 +106,8 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
 
     private static uint[] Ordering<T>(Buckets<T> buckets) => buckets.GetIndexesSortedBySize();
 
-    private bool Searching<T>(Buckets<T> buckets, uint[] sortedIndexes, uint[] lookupTable, uint m, HashCode<T> hashCode, ulong seed0, uint maxSearchingIterations, uint maxSeedGenerationIterations, FchBuildState buildState, out ulong seed) where T : notnull
+    private bool Searching<T>(Buckets<T> buckets, uint[] sortedIndexes, uint[] lookupTable, uint m, HashFunc<T> hashCode, ulong seed0, uint maxSearchingIterations, uint maxSeedGenerationIterations, uint[] mapTable, uint[] randomTable, byte[] stampTable, out ulong seed) where T : notnull
     {
-        buildState.EnsureForMaps((int)m);
-        uint[] randomTable = buildState.RandomTable;
-        uint[] mapTable = buildState.MapTable;
         uint iterationToGenerateH2 = 0;
         uint searchingIterations = 0;
         bool restart;
@@ -120,7 +127,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         do
         {
             seed = GetNextSeed(ref seedState);
-            restart = CheckForCollisionsH2(m, seed, buckets, sortedIndexes, hashCode, buildState);
+            restart = CheckForCollisionsH2(m, seed, buckets, sortedIndexes, hashCode, stampTable);
             uint filledCount = 0;
 
             if (!restart)
@@ -198,11 +205,6 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         return seed;
     }
 
-    internal static uint Mixh10h11h12(uint b, double p1, double p2, uint initialIndex)
-    {
-        return Mixh10h11h12(b, (uint)p1, (uint)p2, initialIndex);
-    }
-
     internal static uint Mixh10h11h12(uint b, uint p1, uint p2, uint initialIndex)
     {
         if (initialIndex < p1)
@@ -219,10 +221,8 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
     }
 
     /* Check whether function h2 causes collisions among the keys of each bucket */
-    private bool CheckForCollisionsH2<T>(uint m, ulong seed, Buckets<T> buckets, uint[] sortedIndexes, HashCode<T> hashCode, FchBuildState buildState)
+    private bool CheckForCollisionsH2<T>(uint m, ulong seed, Buckets<T> buckets, uint[] sortedIndexes, HashFunc<T> hashCode, byte[] stampTable)
     {
-        buildState.EnsureForHashTable((int)m);
-        byte[] stampTable = buildState.StampTable;
         uint numBuckets = buckets.GetNumBuckets();
         byte stamp = 1;
 
@@ -254,44 +254,6 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         return false;
     }
 
-    private sealed class FchBuildState
-    {
-        public uint[] LookupTable = [];
-        public uint[] RandomTable = [];
-        public uint[] MapTable = [];
-        public byte[] StampTable = [];
-        public uint[] BucketByKey = [];
-
-        public void EnsureForLookup(int size)
-        {
-            ArrayEnsure.EnsureCapacity(ref LookupTable, size);
-
-            Array.Clear(LookupTable, 0, size);
-        }
-
-        public void EnsureForMaps(int size)
-        {
-            ArrayEnsure.EnsureCapacity(ref RandomTable, size);
-            ArrayEnsure.EnsureCapacity(ref MapTable, size);
-        }
-
-        public void EnsureForHashTable(int size)
-        {
-            ArrayEnsure.EnsureCapacity(ref StampTable, size);
-        }
-
-        public void EnsureForBucketByKey(int size)
-        {
-            ArrayEnsure.EnsureCapacity(ref BucketByKey, size);
-        }
-    }
-
-    private static uint CalculateB(double c, uint m) => (uint)Math.Ceiling((c * m) / ((Math.Log(m) / Math.Log(2.0)) + 1));
-
-    private static double CalculateP1(uint m) => Math.Ceiling(0.55 * m);
-
-    private static double CalculateP2(uint b) => Math.Ceiling(0.3 * b);
-
     private static void Permute(uint[] vector, uint n, ulong seed)
     {
         for (int i = 0; i < n; i++)
@@ -307,6 +269,55 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         state ^= state >> 17;
         state ^= state << 5;
         return state;
+    }
+
+    private static uint CalculateB(double c, uint m) => (uint)Math.Ceiling((c * m) / ((Math.Log(m) / Math.Log(2.0)) + 1));
+
+    private static uint CalculateP1(uint m) => (uint)Math.Ceiling(0.55 * m);
+
+    private static uint CalculateP2(uint b) => (uint)Math.Ceiling(0.3 * b);
+
+    private sealed class BuildState : IBuildState
+    {
+        public uint[] RandomTable = [];
+        public uint[] MapTable = [];
+        public byte[] StampTable = [];
+        public uint[] BucketByKey = [];
+        public uint[] LookupTable = [];
+        public uint NumItems;
+        public uint B;
+        public uint P1;
+        public uint P2;
+
+        public static bool TryCreate(int keysLength, FchMinimalSettings settings, [NotNullWhen(true)]out BuildState? state)
+        {
+            uint numItems = (uint)keysLength;
+
+            uint b = CalculateB(settings.BitsPerKey, numItems);
+            uint p1 = (uint)CalculateP1(numItems);
+            uint p2 = (uint)CalculateP2(b);
+
+            state = new BuildState
+            {
+                NumItems = numItems,
+                B = b,
+                P1 = p1,
+                P2 = p2,
+                LookupTable = GC.AllocateUninitializedArray<uint>((int)b),
+                RandomTable = GC.AllocateUninitializedArray<uint>(keysLength),
+                MapTable = GC.AllocateUninitializedArray<uint>(keysLength),
+                StampTable = GC.AllocateUninitializedArray<byte>(keysLength),
+                BucketByKey = GC.AllocateUninitializedArray<uint>(keysLength)
+            };
+
+            return true;
+        }
+
+        public void Reset()
+        {
+            Array.Clear(LookupTable, 0, LookupTable.Length);
+            Array.Clear(StampTable, 0, StampTable.Length);
+        }
     }
 
     private sealed class Buckets<T>

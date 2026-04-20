@@ -21,84 +21,72 @@ namespace Genbox.FastMPH.CHM;
 public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMinimalState<TKey>, ChmMinimalSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)] out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out ChmMinimalState<TKey>? state, ChmMinimalSettings? settings = null)
     {
         settings ??= new ChmMinimalSettings();
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
+        if (!TryCreateMinimalState(keys.Length, settings, out IBuildState? buildState))
+        {
+            state = null;
+            return false;
+        }
 
-        ChmBuildState buildState = new ChmBuildState();
-
-        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
+        ulong seed = RandomHelper.Next64();
+        return TryCreateMinimalCore(keys, hashFunc, seed, buildState, settings, out state);
     }
 
-    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, ChmMinimalSettings settings, ulong seed, ChmBuildState buildState, [NotNullWhen(true)]out ChmMinimalState<TKey>? state)
+    /// <inheritdoc />
+    public bool TryCreateMinimalState(int numKeys, ChmMinimalSettings settings, [NotNullWhen(true)]out IBuildState? state)
     {
+        if (!BuildState.TryCreate(numKeys, settings, _logger, out BuildState? typed))
+        {
+            state = null;
+            return false;
+        }
+
+        state = typed;
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, ChmMinimalSettings settings, [NotNullWhen(true)]out ChmMinimalState<TKey>? queryState)
+    {
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
+
         LogCreating(keys.Length, settings.LoadFactor);
-
-        uint numEdges = (uint)keys.Length;
-        uint numVertices = (uint)Math.Ceiling(settings.LoadFactor * numEdges);
-
-        buildState.EnsureForGraph(_logger, numVertices, numEdges);
-        Graph graph = buildState.Graph;
 
         //Mapping step
         LogMappingStep();
 
-        if (!GenerateEdges(graph, seed, numVertices, keys, hashCode))
+        if (!GenerateEdges(build.Graph, seed, build.NumVertices, keys, hashFunc))
         {
             LogFailed();
-            state = null;
+            queryState = null;
             return false;
         }
 
         //Assignment step
         LogAssignmentStep();
 
-        buildState.EnsureForVertices((int)numVertices);
-        byte[] visited = buildState.Visited;
-        uint[] lookupTable = buildState.LookupTable;
-        Array.Clear(visited, 0, visited.Length);
-        Array.Clear(lookupTable, 0, lookupTable.Length);
+        Array.Clear(build.Visited, 0, build.Visited.Length);
+        Array.Clear(build.LookupTable, 0, build.LookupTable.Length);
 
-        for (uint i = 0; i < numVertices; ++i)
+        for (uint i = 0; i < build.NumVertices; ++i)
         {
-            if (!GetBit(visited, i))
+            if (!GetBit(build.Visited, i))
             {
-                lookupTable[i] = 0;
-                Traverse(graph, lookupTable, visited, i);
+                build.LookupTable[i] = 0;
+                Traverse(build.Graph, build.LookupTable, build.Visited, i);
             }
         }
+
+        uint[] lookupTable = GC.AllocateUninitializedArray<uint>(build.LookupTable.Length);
+        Array.Copy(build.LookupTable, lookupTable, lookupTable.Length);
+        queryState = new ChmMinimalState<TKey>(build.NumVertices, build.NumEdges, lookupTable, seed, hashFunc);
 
         LogSuccess();
-        state = new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed, hashCode);
         return true;
-    }
-
-    private sealed class ChmBuildState
-    {
-        public Graph Graph = null!;
-        private uint _graphVertices;
-        private uint _graphEdges;
-        public byte[] Visited = [];
-        public uint[] LookupTable = [];
-
-        public void EnsureForGraph(ILogger logger, uint numVertices, uint numEdges)
-        {
-            if (Graph == null || _graphVertices != numVertices || _graphEdges != numEdges)
-            {
-                Graph = new Graph(logger, numVertices, numEdges);
-                _graphVertices = numVertices;
-                _graphEdges = numEdges;
-            }
-        }
-
-        public void EnsureForVertices(int numVertices)
-        {
-            int visitedLength = (numVertices / 8) + 1;
-            ArrayEnsure.EnsureCapacity(ref Visited, visitedLength);
-            ArrayEnsure.EnsureCapacity(ref LookupTable, numVertices);
-        }
     }
 
     private void Traverse(Graph graph, uint[] lookupTable, byte[] visited, uint v)
@@ -129,7 +117,7 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
         }
     }
 
-    private bool GenerateEdges<T>(Graph graph, ulong seed, uint numVertices, ReadOnlySpan<T> keys, HashCode<T> hashCode) where T : notnull
+    private bool GenerateEdges<T>(Graph graph, ulong seed, uint numVertices, ReadOnlySpan<T> keys, HashFunc<T> hashCode) where T : notnull
     {
         graph.ClearEdges();
 
@@ -160,5 +148,40 @@ public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMini
         }
 
         return true;
+    }
+
+    private sealed class BuildState : IBuildState
+    {
+        public Graph Graph = null!;
+        public byte[] Visited = [];
+        public uint[] LookupTable = [];
+        public uint NumVertices;
+        public uint NumEdges;
+
+        public static bool TryCreate(int keyLength, ChmMinimalSettings settings, ILogger logger, [NotNullWhen(true)]out BuildState? state)
+        {
+            uint numEdges = (uint)keyLength;
+            uint numVertices = (uint)Math.Ceiling(settings.LoadFactor * numEdges);
+            Graph graph = new Graph(logger, numVertices, numEdges);
+
+            int visitedLength = ((int)numVertices / 8) + 1;
+
+            state = new BuildState
+            {
+                Graph = graph,
+                NumEdges = numEdges,
+                NumVertices = numVertices,
+                Visited = GC.AllocateUninitializedArray<byte>(visitedLength),
+                LookupTable = GC.AllocateUninitializedArray<uint>((int)numVertices)
+            };
+
+            return true;
+        }
+
+        public void Reset()
+        {
+            Array.Clear(Visited, 0, Visited.Length);
+            Array.Clear(LookupTable, 0, LookupTable.Length);
+        }
     }
 }

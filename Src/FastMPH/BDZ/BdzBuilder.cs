@@ -1,11 +1,8 @@
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
-using Genbox.FastMPH.Internals.Compat;
 using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
-using Microsoft.Extensions.Logging;
 using static Genbox.FastMPH.Internals.BitArray;
 
 namespace Genbox.FastMPH.BDZ;
@@ -23,119 +20,157 @@ namespace Genbox.FastMPH.BDZ;
 public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMinimalState<TKey>, BdzMinimalSettings>, IHashBuilder<TKey, BdzState<TKey>, BdzSettings> where TKey : notnull
 {
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out BdzState<TKey>? state, BdzSettings? settings = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out BdzState<TKey>? state, BdzSettings? settings = null)
     {
         settings ??= new BdzSettings();
 
-        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
-        BdzBuildState buildState = new BdzBuildState();
-
-        return TryCreateCore(keys, hashCode, settings, seed, buildState, out state);
-    }
-
-    private bool TryCreateCore(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, BdzSettings settings, ulong seed, BdzBuildState buildState, [NotNullWhen(true)]out BdzState<TKey>? state)
-    {
-        LogCreating(keys.Length, settings.LoadFactor);
-
-        if (!TryCreate(keys, hashCode, false, settings.LoadFactor, seed, buildState, out uint numPartitions, out uint numVertices, out byte[]? lookupTable))
+        if (!TryCreateState(keys.Length, settings, out IBuildState? buildState))
         {
-            LogFailed();
             state = null;
             return false;
         }
 
-        lookupTable = Optimize(lookupTable, numVertices);
-        LogSuccess(seed, numPartitions);
+        ulong seed = RandomHelper.Next64();
+        return TryCreateCore(keys, hashFunc, seed, buildState, settings, out state);
+    }
 
-        state = new BdzState<TKey>(numPartitions, lookupTable, seed, hashCode);
+    /// <inheritdoc />
+    public bool TryCreateState(int numKeys, BdzSettings settings, [NotNullWhen(true)]out IBuildState? state)
+    {
+        if (!BuildState.TryCreate(numKeys, settings.LoadFactor, out BuildState? typed))
+        {
+            state = null;
+            return false;
+        }
+
+        state = typed;
         return true;
     }
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null)
+    public bool TryCreateCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, BdzSettings settings, [NotNullWhen(true)]out BdzState<TKey>? queryState)
+    {
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
+
+        LogCreating(keys.Length, settings.LoadFactor);
+
+        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
+
+        if (!TryCreateCoreInternal(keys, hashCode, seed, false, build.NumEdges, build.NumVertices, build.NumPartitions, build.Graph, build.Queue, build.MarkedEdge, build.MarkedVertices, build.LookupTable))
+        {
+            LogFailed();
+            queryState = null;
+            return false;
+        }
+
+        byte[] optimized = Optimize(build.LookupTable, build.NumVertices);
+        LogSuccess(seed, build.NumPartitions);
+
+        queryState = new BdzState<TKey>(build.NumPartitions, optimized, seed, hashFunc);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out BdzMinimalState<TKey>? state, BdzMinimalSettings? settings = null)
     {
         settings ??= new BdzMinimalSettings();
 
-        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
-        BdzBuildState buildState = new BdzBuildState();
-
-        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
-    }
-
-    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, BdzMinimalSettings settings, ulong seed, BdzBuildState buildState, [NotNullWhen(true)]out BdzMinimalState<TKey>? state)
-    {
-        LogCreatingMinimal(keys.Length, settings.LoadFactor, settings.NumBitsOfKey);
-
-        if (!TryCreate(keys, hashCode, true, settings.LoadFactor, seed, buildState, out uint numPartitions, out uint numVertices, out byte[]? lookupTable))
+        if (!TryCreateMinimalState(keys.Length, settings, out IBuildState? buildState))
         {
-            LogFailed();
             state = null;
             return false;
         }
 
-        uint indexInRank = 1U << settings.NumBitsOfKey;
-        uint[] rankTable = RankingStep(lookupTable, indexInRank, (uint)Math.Ceiling(numVertices / (double)indexInRank));
-        LogRankTable(rankTable);
-        LogSuccess(seed, numPartitions);
-
-        state = new BdzMinimalState<TKey>(numPartitions, lookupTable, seed, settings.NumBitsOfKey, rankTable, hashCode);
-        return true;
+        ulong seed = RandomHelper.Next64();
+        return TryCreateMinimalCore(keys, hashFunc, seed, buildState, settings, out state);
     }
 
-    private bool TryCreate(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, bool minimal, double loadFactor, ulong seed, BdzBuildState buildState, out uint numPartitions, out uint numVertices, [NotNullWhen(true)]out byte[]? lookupTable)
+    /// <inheritdoc />
+    public bool TryCreateMinimalState(int numKeys, BdzMinimalSettings settings, [NotNullWhen(true)]out IBuildState? state)
     {
-        uint numEdges = (uint)keys.Length;
-        numPartitions = (uint)Math.Ceiling((loadFactor * numEdges) / 3);
-
-        if (numPartitions % 2 == 0)
-            numPartitions++;
-
-        // workaround for small key sets
-        if (numPartitions == 1)
-            numPartitions = 3;
-
-        numVertices = 3 * numPartitions;
-
-        buildState.EnsureForGraph(numEdges, numVertices);
-        buildState.EnsureForEdges(numEdges);
-        buildState.EnsureForVertices(numVertices);
-
-        Graph graph = buildState.Graph;
-        uint[] queue = buildState.Queue;
-
-        LogCreatedHyperGraph(numEdges, numVertices);
-
-        if (!MappingStep(keys, seed, numPartitions, numEdges, graph, queue, buildState.MarkedEdge, hashCode))
+        if (!BuildState.TryCreate(numKeys, settings.LoadFactor, out BuildState? typed))
         {
-            LogFailed();
-            lookupTable = null;
+            state = null;
             return false;
         }
 
-        lookupTable = AssigningStep(numVertices, graph, queue, minimal, buildState.MarkedVertices, buildState.LookupTable);
+        state = typed;
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, BdzMinimalSettings settings, [NotNullWhen(true)]out BdzMinimalState<TKey>? queryState)
+    {
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
+
+        LogCreatingMinimal(keys.Length, settings.LoadFactor, settings.NumBitsOfKey);
+
+        HashCode3<TKey> hashCode = HashHelper.GetHashFunc3(hashFunc);
+
+        if (!TryCreateCoreInternal(keys, hashCode, seed, true, build.NumEdges, build.NumVertices, build.NumPartitions, build.Graph, build.Queue, build.MarkedEdge, build.MarkedVertices, build.LookupTable))
+        {
+            LogFailed();
+            queryState = null;
+            return false;
+        }
+
+        uint indexInRank = 1U << settings.NumBitsOfKey;
+        uint[] rankTable = RankingStep(build.LookupTable, indexInRank, (uint)Math.Ceiling(build.NumVertices / (double)indexInRank));
+        LogRankTable(rankTable);
+        LogSuccess(seed, build.NumPartitions);
+
+        byte[] lookupTable = GC.AllocateUninitializedArray<byte>(build.LookupTable.Length);
+        Array.Copy(build.LookupTable, lookupTable, lookupTable.Length);
+        queryState = new BdzMinimalState<TKey>(seed, build.NumPartitions, settings.NumBitsOfKey, lookupTable, rankTable, hashFunc);
+        return true;
+    }
+
+    private bool TryCreateCoreInternal(ReadOnlySpan<TKey> keys, HashCode3<TKey> hashCode, ulong seed, bool minimal, uint numEdges, uint numVertices, uint numPartitions, Graph graph, uint[] queue, byte[] markedEdge, byte[] markedVertices, byte[] lookupTable)
+    {
+        LogCreatedHyperGraph(numEdges, numVertices);
+
+        if (!MappingStep(keys, seed, numPartitions, numEdges, graph, queue, markedEdge, hashCode))
+        {
+            LogFailed();
+            return false;
+        }
+
+        AssigningStep(numVertices, graph, queue, minimal, markedVertices, lookupTable);
         LogLookupTable(lookupTable);
         return true;
     }
 
-    private static byte[] Optimize(byte[] lookupTable, uint numVertices)
+    private bool MappingStep(ReadOnlySpan<TKey> keys, ulong seed, uint numPartitions, uint numEdges, Graph graph, uint[] queue, byte[] markedEdge, HashCode3<TKey> hashCode)
     {
-        uint newSize = (uint)Math.Ceiling(numVertices / 5.0);
-        byte[] newLookup = new byte[newSize];
+        LogMappingStep(keys.Length, seed, numPartitions, numEdges);
 
-        for (uint i = 0; i < numVertices; i++)
+        graph.Clear();
+
+        Span<uint> hashes = stackalloc uint[3];
+
+        for (int i = 0; i < keys.Length; i++)
         {
-            uint idx = i / 5;
-            byte value = GetValue(lookupTable, i);
-            newLookup[idx] = (byte)(newLookup[idx] + (value * BdzShared.Pow3Table[i % 5]));
+            hashCode(keys[i], seed, hashes);
+            hashes[0] = hashes[0] % numPartitions;
+            hashes[1] = (hashes[1] % numPartitions) + numPartitions;
+            hashes[2] = (hashes[2] % numPartitions) + (numPartitions << 1); //n + 2 * n
+
+            LogAddingEdge(hashes[0], hashes[1], hashes[2]);
+            graph.AddEdge(hashes[0], hashes[1], hashes[2]);
         }
 
-        return newLookup;
+        return GenerateQueue(numEdges, queue, markedEdge, graph) == 0;
     }
 
     private int GenerateQueue(uint numEdges, uint[] queue, byte[] markedEdge, Graph graph)
     {
-        uint v0, v1, v2;
-        uint queueHead = 0, queueTail = 0;
+        uint v0;
+        uint v1;
+        uint v2;
+        uint queueHead = 0;
+        uint queueTail = 0;
         Array.Clear(markedEdge, 0, (int)((numEdges >> 3) + 1));
 
         for (uint i = 0; i < numEdges; i++)
@@ -198,47 +233,23 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
             SetBit(markedEdge, tmpEdge);
         }
 
-        return (int)queueHead - (int)numEdges; /* returns 0 if successful otherwise return negative number*/
+        return (int)queueHead - (int)numEdges;
     }
 
-    private bool MappingStep(ReadOnlySpan<TKey> keys, ulong seed, uint numPartitions, uint numEdges, Graph graph, uint[] queue, byte[] markedEdge, HashCode3<TKey> hashCode)
-    {
-        LogMappingStep(keys.Length, seed, numPartitions, numEdges);
-
-        //Genbox: I've refactored the graph reset code into the graph itself for clarity
-        graph.Clear();
-
-        Span<uint> hashes = stackalloc uint[3];
-
-        for (int i = 0; i < keys.Length; i++)
-        {
-            hashCode(keys[i], seed, hashes);
-            hashes[0] = hashes[0] % numPartitions;
-            hashes[1] = (hashes[1] % numPartitions) + numPartitions;
-            hashes[2] = (hashes[2] % numPartitions) + (numPartitions << 1); //n + 2 * n
-
-            LogAddingEdge(hashes[0], hashes[1], hashes[2]);
-            graph.AddEdge(hashes[0], hashes[1], hashes[2]);
-        }
-
-        return GenerateQueue(numEdges, queue, markedEdge, graph) == 0;
-    }
-
-    private byte[] AssigningStep(uint numVertices, Graph graph, uint[] queue, bool minimal, byte[] markedVertices, byte[] lookupTable)
+    private void AssigningStep(uint numVertices, Graph graph, uint[] queue, bool minimal, byte[] markedVertices, byte[] lookupTable)
     {
         LogAssigningStep(queue.Length, numVertices);
 
         uint numEdges = graph.NumEdges;
-        byte[] g = lookupTable;
         int lookupLength = (int)Math.Ceiling(numVertices / 4.0);
 
         if (minimal)
-            Array.Fill<byte>(g, 0xff, 0, lookupLength);
+            Array.Fill<byte>(lookupTable, 0xff, 0, lookupLength);
         else
-            Array.Clear(g, 0, lookupLength);
+            Array.Clear(lookupTable, 0, lookupLength);
 
         Array.Fill<byte>(markedVertices, 0, 0, (int)((numVertices >> 3) + 1));
-        bool isTraceEnabled = _logger.IsEnabled(LogLevel.Trace);
+        bool isTraceEnabled = _logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Trace);
 
         for (uint i = numEdges - 1; i + 1 >= 1; i--)
         {
@@ -248,14 +259,14 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
             uint v2 = graph.Edges[currEdge].Vertices[2];
 
             if (isTraceEnabled)
-                LogEntryB(v0, v1, v2, GetValue(g, v0), GetValue(g, v1), GetValue(g, v2), currEdge);
+                LogEntryB(v0, v1, v2, GetValue(lookupTable, v0), GetValue(lookupTable, v1), GetValue(lookupTable, v2), currEdge);
 
             if (!GetBit(markedVertices, v0))
             {
                 if (!GetBit(markedVertices, v1))
                 {
                     if (!minimal)
-                        SetValue1(g, v1, BdzShared.Unassigned);
+                        SetValue1(lookupTable, v1, BdzShared.Unassigned);
 
                     SetBit(markedVertices, v1);
                 }
@@ -263,15 +274,15 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
                 if (!GetBit(markedVertices, v2))
                 {
                     if (!minimal)
-                        SetValue1(g, v2, BdzShared.Unassigned);
+                        SetValue1(lookupTable, v2, BdzShared.Unassigned);
 
                     SetBit(markedVertices, v2);
                 }
 
                 if (minimal)
-                    SetValue1(g, v0, (uint)((6 - (GetValue(g, v1) + GetValue(g, v2))) % 3));
+                    SetValue1(lookupTable, v0, (uint)((6 - (GetValue(lookupTable, v1) + GetValue(lookupTable, v2))) % 3));
                 else
-                    SetValue0(g, v0, (uint)((6 - (GetValue(g, v1) + GetValue(g, v2))) % 3));
+                    SetValue0(lookupTable, v0, (uint)((6 - (GetValue(lookupTable, v1) + GetValue(lookupTable, v2))) % 3));
 
                 SetBit(markedVertices, v0);
             }
@@ -280,46 +291,60 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
                 if (!GetBit(markedVertices, v2))
                 {
                     if (!minimal)
-                        SetValue1(g, v2, BdzShared.Unassigned);
+                        SetValue1(lookupTable, v2, BdzShared.Unassigned);
 
                     SetBit(markedVertices, v2);
                 }
 
                 if (minimal)
-                    SetValue1(g, v1, (uint)((7 - (GetValue(g, v0) + GetValue(g, v2))) % 3));
+                    SetValue1(lookupTable, v1, (uint)((7 - (GetValue(lookupTable, v0) + GetValue(lookupTable, v2))) % 3));
                 else
-                    SetValue0(g, v1, (uint)((7 - (GetValue(g, v0) + GetValue(g, v2))) % 3));
+                    SetValue0(lookupTable, v1, (uint)((7 - (GetValue(lookupTable, v0) + GetValue(lookupTable, v2))) % 3));
 
                 SetBit(markedVertices, v1);
             }
             else
             {
                 if (minimal)
-                    SetValue1(g, v2, (uint)((8 - (GetValue(g, v0) + GetValue(g, v1))) % 3));
+                    SetValue1(lookupTable, v2, (uint)((8 - (GetValue(lookupTable, v0) + GetValue(lookupTable, v1))) % 3));
                 else
-                    SetValue0(g, v2, (uint)((8 - (GetValue(g, v0) + GetValue(g, v1))) % 3));
+                    SetValue0(lookupTable, v2, (uint)((8 - (GetValue(lookupTable, v0) + GetValue(lookupTable, v1))) % 3));
 
                 SetBit(markedVertices, v2);
             }
 
             if (isTraceEnabled)
-                LogEntryA(v0, v1, v2, GetValue(g, v0), GetValue(g, v1), GetValue(g, v2));
+                LogEntryA(v0, v1, v2, GetValue(lookupTable, v0), GetValue(lookupTable, v1), GetValue(lookupTable, v2));
+        }
+    }
+
+    private static byte[] Optimize(byte[] lookupTable, uint numVertices)
+    {
+        uint newSize = (uint)Math.Ceiling(numVertices / 5.0);
+        byte[] newLookup = new byte[newSize];
+
+        for (uint i = 0; i < numVertices; i++)
+        {
+            uint idx = i / 5;
+            byte value = GetValue(lookupTable, i);
+            newLookup[idx] = (byte)(newLookup[idx] + (value * BdzShared.Pow3Table[i % 5]));
         }
 
-        return g;
+        return newLookup;
     }
 
     private uint[] RankingStep(byte[] lookupTable, uint indexInRank, uint rankTableLength)
     {
         LogRankingStep(lookupTable.Length, indexInRank, rankTableLength);
 
-        uint offset = 0U, count = 0U, size = indexInRank >> 2, numBytesTotal = (uint)lookupTable.Length;
+        uint offset = 0U;
+        uint count = 0U;
+        uint size = indexInRank >> 2;
+        uint numBytesTotal = (uint)lookupTable.Length;
         uint[] rankTable = new uint[rankTableLength];
 
-        //Genbox: Lazy load the lookup table
         byte[] table = BdzShared.LookupTable.Value;
 
-        //Genbox: This was a while loop with a break condition. I've simplified it to a for-loop.
         for (uint i = 1; i != rankTableLength; i++)
         {
             uint numBytes = size < numBytesTotal ? size : numBytesTotal;
@@ -335,127 +360,49 @@ public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMini
         return rankTable;
     }
 
-    private sealed class BdzBuildState
+    private sealed class BuildState : IBuildState
     {
-        public Graph? Graph;
+        public uint NumEdges;
+        public uint NumPartitions;
+        public uint NumVertices;
+        public Graph Graph = null!;
         public uint[] Queue = [];
         public byte[] MarkedEdge = [];
         public byte[] MarkedVertices = [];
         public byte[] LookupTable = [];
-        private uint _numEdges;
-        private uint _numVertices;
 
-        public void EnsureForGraph(uint numEdges, uint numVertices)
+        public static bool TryCreate(int keysLength, double loadFactor, [NotNullWhen(true)]out BuildState? state)
         {
-            if (Graph == null || _numEdges != numEdges || _numVertices != numVertices)
+            uint numEdges = (uint)keysLength;
+            uint numPartitions = (uint)Math.Ceiling((loadFactor * numEdges) / 3);
+
+            if (numPartitions % 2 == 0)
+                numPartitions++;
+
+            if (numPartitions == 1)
+                numPartitions = 3;
+
+            uint numVertices = 3 * numPartitions;
+
+            state = new BuildState
             {
-                Graph = new Graph(numEdges, numVertices);
-                _numEdges = numEdges;
-                _numVertices = numVertices;
-            }
+                NumEdges = numEdges,
+                NumPartitions = numPartitions,
+                NumVertices = numVertices,
+                Graph = new Graph(numEdges, numVertices),
+                Queue = GC.AllocateUninitializedArray<uint>((int)numEdges),
+                MarkedEdge = GC.AllocateUninitializedArray<byte>((int)((numEdges >> 3) + 1)),
+                MarkedVertices = GC.AllocateUninitializedArray<byte>((int)((numVertices >> 3) + 1)),
+                LookupTable = GC.AllocateUninitializedArray<byte>((int)Math.Ceiling(numVertices / 4.0))
+            };
+
+            return true;
         }
 
-        public void EnsureForEdges(uint numEdges)
+        public void Reset()
         {
-            ArrayEnsure.EnsureCapacity(ref Queue, (int)numEdges);
-
-            int markedEdgeLength = (int)((numEdges >> 3) + 1);
-            ArrayEnsure.EnsureCapacity(ref MarkedEdge, markedEdgeLength);
-        }
-
-        public void EnsureForVertices(uint numVertices)
-        {
-            int markedVerticesLength = (int)((numVertices >> 3) + 1);
-            ArrayEnsure.EnsureCapacity(ref MarkedVertices, markedVerticesLength);
-
-            int lookupLength = (int)Math.Ceiling(numVertices / 4.0);
-            ArrayEnsure.EnsureCapacity(ref LookupTable, lookupLength);
-        }
-    }
-
-    private sealed class Edge
-    {
-        public readonly uint[] NextEdges = new uint[3];
-        public readonly uint[] Vertices = new uint[3];
-    }
-
-    private sealed class Graph
-    {
-        private const uint NullEdge = 0xffffffff;
-        public readonly Edge[] Edges;
-        public readonly uint[] FirstEdge;
-        public readonly byte[] VertexDegree;
-
-        public uint NumEdges;
-
-        public Graph(uint numEdges, uint numVertices)
-        {
-            Edges = new Edge[numEdges];
-            VertexDegree = new byte[numVertices];
-            FirstEdge = new uint[numVertices];
-            Array.Fill(FirstEdge, NullEdge);
-        }
-
-        internal void AddEdge(uint v0, uint v1, uint v2)
-        {
-            Edge edge = Edges[NumEdges] ?? new Edge();
-            edge.Vertices[0] = v0;
-            edge.Vertices[1] = v1;
-            edge.Vertices[2] = v2;
-            edge.NextEdges[0] = FirstEdge[v0];
-            edge.NextEdges[1] = FirstEdge[v1];
-            edge.NextEdges[2] = FirstEdge[v2];
-
-            FirstEdge[v0] = FirstEdge[v1] = FirstEdge[v2] = NumEdges;
-            VertexDegree[v0]++;
-            VertexDegree[v1]++;
-            VertexDegree[v2]++;
-
-            Edges[NumEdges] = edge;
-            NumEdges++;
-        }
-
-        public void RemoveEdge(uint currentEdge)
-        {
-            //Genbox: NumEdges is not decremented here. Possible bug?
-
-            int j = 0;
-            for (int i = 0; i < 3; i++)
-            {
-                uint vert = Edges[currentEdge].Vertices[i];
-                uint edge1 = FirstEdge[vert];
-                uint edge2 = NullEdge;
-
-                while (edge1 != currentEdge && edge1 != NullEdge)
-                {
-                    edge2 = edge1;
-
-                    if (Edges[edge1].Vertices[0] == vert)
-                        j = 0;
-                    else if (Edges[edge1].Vertices[1] == vert)
-                        j = 1;
-                    else
-                        j = 2;
-
-                    edge1 = Edges[edge1].NextEdges[j];
-                }
-
-                Debug.Assert(edge1 != NullEdge);
-
-                if (edge2 != NullEdge)
-                    Edges[edge2].NextEdges[j] = Edges[edge1].NextEdges[i];
-                else
-                    FirstEdge[vert] = Edges[edge1].NextEdges[i];
-
-                VertexDegree[vert]--;
-            }
-        }
-
-        public void Clear()
-        {
-            Array.Fill(FirstEdge, NullEdge);
-            Array.Fill<byte>(VertexDegree, 0);
-            NumEdges = 0;
+            Array.Clear(MarkedEdge, 0, MarkedEdge.Length);
+            Array.Clear(MarkedVertices, 0, MarkedVertices.Length);
         }
     }
 }

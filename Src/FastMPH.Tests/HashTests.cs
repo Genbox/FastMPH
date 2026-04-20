@@ -1,6 +1,5 @@
 using System.IO.Hashing;
 using System.Text;
-using Genbox.FastMPH;
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.BMZ;
@@ -9,6 +8,7 @@ using Genbox.FastMPH.CHM;
 using Genbox.FastMPH.FCH;
 using Genbox.FastMPH.BBHash;
 using Genbox.FastMPH.Hyble;
+using Genbox.FastMPH.Internals.Helpers;
 using Genbox.FastMPH.PTRHash;
 using Genbox.FastMPH.Tests.Misc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -19,11 +19,11 @@ public class HashTests(ITestOutputHelper output)
 {
     public delegate bool HashFunc<TState>(ReadOnlySpan<byte[]> data, out TState? result);
 
-    private static ulong ByteArrayHash(byte[] value) => XxHash3.HashToUInt64(value);
+    private static ulong ByteArrayHash(byte[] value, ulong seed) => unchecked(XxHash3.HashToUInt64(value, (long)seed));
 
     [Theory]
     [MemberData(nameof(GetImpl))]
-    public void PerfectHashTest<TState>(HashFunc<TState?> create, Func<byte[], TState> unpack) where TState : IHashState<byte[]>
+    public void PerfectHashTest<TState>(HashFunc<TState?> create, Func<byte[], TState> unpack) where TState : IQueryState<byte[]>
     {
         byte[][] values = StringHelper.GetRandomStrings(10, 100).DistinctBy(x => x).Select(x => Encoding.UTF8.GetBytes(x)).ToArray();
 
@@ -48,7 +48,7 @@ public class HashTests(ITestOutputHelper output)
         byte[] packed = new byte[size];
         state.Pack(packed);
 
-        IHashState<byte[]> unpacked = unpack(packed);
+        IQueryState<byte[]> unpacked = unpack(packed);
         Assert.Equivalent(state, unpacked);
 
         //Test if we can query the unpacked version. It should give us only already known values.

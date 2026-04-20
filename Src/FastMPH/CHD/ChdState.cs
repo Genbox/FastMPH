@@ -8,22 +8,20 @@ namespace Genbox.FastMPH.CHD;
 
 /// <summary>Contains the state of a CHD perfect hash function</summary>
 [PublicAPI]
-public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
+public sealed class ChdState<TKey> : IQueryState<TKey> where TKey : notnull
 {
     private readonly CompressedSequence _cs;
     private readonly HashCode3<TKey> _hashCode;
-    internal readonly uint NumKeys;
-    internal readonly byte[] OccupTable;
 
-    internal ChdState(CompressedSequence cs, uint numBuckets, uint numBins, uint numKeys, ulong seed, byte[] occupTable, HashCode3<TKey> hashCode)
+    internal ChdState(CompressedSequence cs, uint numBuckets, uint numBins, uint numKeys, ulong seed, byte[] occupTable, HashFunc<TKey> hashFunc)
     {
         _cs = cs;
+        _hashCode = HashHelper.GetHashFunc3(hashFunc);
         NumBuckets = numBuckets;
         NumBins = numBins;
         NumKeys = numKeys;
         Seed = seed;
         OccupTable = occupTable;
-        _hashCode = hashCode;
     }
 
     /// <summary>The seed used in the hash function</summary>
@@ -34,6 +32,9 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
 
     /// <summary>The number of bins</summary>
     public uint NumBins { get; }
+
+    internal uint NumKeys { get; }
+    internal byte[] OccupTable { get; }
 
     /// <inheritdoc />
     public uint Search(TKey key)
@@ -53,19 +54,13 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     }
 
     /// <inheritdoc />
-    public uint GetPackedSize()
-    {
-        uint size = sizeof(ulong) + //Seed
-                    sizeof(uint) + //NumBuckets
-                    sizeof(uint) + //NumBins
-                    sizeof(uint) + //NumKeys
-                    sizeof(uint) + //OccupTable length
-                    (sizeof(byte) * (uint)OccupTable.Length) + //OccupTable
-                    sizeof(uint) + //OccupTable length
-                    _cs.GetPackedSize();
-
-        return size;
-    }
+    public uint GetPackedSize() => sizeof(ulong) + //Seed
+                                   sizeof(uint) + //NumBuckets
+                                   sizeof(uint) + //NumBins
+                                   sizeof(uint) + //NumKeys
+                                   sizeof(uint) + //OccupTable length
+                                   (sizeof(byte) * (uint)OccupTable.Length) + //OccupTable
+                                   _cs.GetPackedSize();
 
     /// <inheritdoc />
     public void Pack(Span<byte> buffer)
@@ -76,7 +71,6 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
         sw.WriteUInt32(NumBins);
         sw.WriteUInt32(NumKeys);
         sw.WriteByteArray(OccupTable);
-
         _cs.Pack(sw);
     }
 
@@ -84,8 +78,7 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
     /// Deserialize a serialized perfect hash function into a new instance of <see cref="ChdState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static ChdState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
+    public static ChdState<TKey> Unpack(ReadOnlySpan<byte> packed, HashFunc<TKey> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
         ulong seed = sr.ReadUInt64();
@@ -95,6 +88,6 @@ public sealed class ChdState<TKey> : IHashState<TKey> where TKey : notnull
         byte[] occupTable = sr.ReadByteArray();
 
         CompressedSequence cs = CompressedSequence.Unpack(sr);
-        return new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, HashHelper.GetHashFunc3(hashFunc));
+        return new ChdState<TKey>(cs, numBuckets, numBins, numKeys, seed, occupTable, hashFunc);
     }
 }

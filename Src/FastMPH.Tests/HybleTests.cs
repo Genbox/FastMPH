@@ -1,12 +1,13 @@
 using Genbox.FastMPH.Hyble;
+using Genbox.FastMPH.Internals;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Genbox.FastMPH.Tests;
 
 public class HybleTests
 {
-    private static readonly Func<int, ulong> _intHash = value => unchecked((ulong)value);
-    private static readonly Func<string, ulong> _ordinalIgnoreCaseHash = value => unchecked((ulong)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
+    private static readonly HashFunc<int> _intHash = static (value, seed) => unchecked((ulong)value * seed);
+    private static readonly HashFunc<string> _ordinalIgnoreCaseHash = static (value, seed) => unchecked((ulong)StringComparer.OrdinalIgnoreCase.GetHashCode(value) * seed);
 
     [Fact]
     public void BuildsPerfectHashForIntegers()

@@ -1,4 +1,6 @@
 using Genbox.FastMPH.PTRHash;
+using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Genbox.FastMPH.Tests;
@@ -7,8 +9,8 @@ public class PtrHashTests
 {
     private static readonly int[] _randomSizes = [0, 1, 2, 3, 10, 30, 100, 300, 1_000, 3_000, 10_000];
     private static readonly int[] _multipleSizes = [0, 1, 2, 10, 100, 300, 1_000, 3_000];
-    private static readonly Func<ulong, ulong> _strongUlongHash = Mix64;
-    private static readonly Func<string, ulong> _ordinalIgnoreCaseHash = value => unchecked((ulong)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
+    private static readonly HashFunc<ulong> _strongUlongHash = (value, seed) => unchecked(value * seed);
+    private static readonly HashFunc<string> _ordinalIgnoreCaseHash = (value, seed) => unchecked((ulong)StringComparer.OrdinalIgnoreCase.GetHashCode(value) * seed);
 
     [Theory]
     [InlineData(PtrHashBucketFunction.Linear)]
@@ -159,22 +161,9 @@ public class PtrHashTests
         ulong[] result = new ulong[count];
 
         for (int i = 0; i < count; i++)
-            result[i] = Mix64((ulong)i + 1UL);
+            result[i] = HashHelper.Mix64((ulong)i + 1UL);
 
         return result;
-    }
-
-    private static ulong Mix64(ulong x)
-    {
-        unchecked
-        {
-            x ^= x >> 33;
-            x *= 0xff51afd7ed558ccdUL;
-            x ^= x >> 33;
-            x *= 0xc4ceb9fe1a85ec53UL;
-            x ^= x >> 33;
-            return x;
-        }
     }
 
     private static ulong Pow(ulong value, int exp)
@@ -186,5 +175,5 @@ public class PtrHashTests
         return result;
     }
 
-    private static Func<T, ulong> GetDefaultHash<T>() where T : notnull => value => unchecked((ulong)value.GetHashCode());
+    private static HashFunc<T> GetDefaultHash<T>() where T : notnull => (value, seed) => unchecked((ulong)value.GetHashCode() ^ seed);
 }

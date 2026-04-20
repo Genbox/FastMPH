@@ -8,16 +8,12 @@ namespace Genbox.FastMPH.BBHash;
 
 /// <summary>Contains the state of a BBHash minimal perfect hash function.</summary>
 [PublicAPI]
-public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : notnull
+public sealed class BbHashMinimalState<TKey> : IQueryState<TKey> where TKey : notnull
 {
-    private const int RankSampleBits = 512;
-    private const int RankSampleWords = RankSampleBits / 32;
+    private readonly HashFunc<TKey> _hashFunc;
 
-    private readonly HashCode<TKey> _hashCode;
-
-    internal BbHashMinimalState(uint numKeys, ulong seed, uint[] domains, uint[] offsets, uint[] bitsetStarts, uint[] rankStarts, uint[] bitsetWords, uint[] rankPrefixes, HashCode<TKey> hashCode)
+    internal BbHashMinimalState(ulong seed, uint[] domains, uint[] offsets, uint[] bitsetStarts, uint[] rankStarts, uint[] bitsetWords, uint[] rankPrefixes, HashFunc<TKey> hashFunc)
     {
-        NumKeys = numKeys;
         Seed = seed;
         Domains = domains;
         Offsets = offsets;
@@ -25,11 +21,8 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
         RankStarts = rankStarts;
         BitsetWords = bitsetWords;
         RankPrefixes = rankPrefixes;
-        _hashCode = hashCode;
+        _hashFunc = hashFunc;
     }
-
-    /// <summary>The number of keys in the original set.</summary>
-    public uint NumKeys { get; }
 
     /// <summary>The hash seed.</summary>
     public ulong Seed { get; }
@@ -58,7 +51,7 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
         for (int level = 0; level < Domains.Length; level++)
         {
             uint domain = Domains[level];
-            uint pos = HashHelper.Reduce(BbHashHelper.GetLevelHash(key, (uint)level, Seed, _hashCode), domain);
+            uint pos = HashHelper.Reduce(BbHashShared.GetLevelHash(key, (uint)level, Seed, _hashFunc), domain);
 
             int word = (int)(pos >> 5);
             int bit = (int)(pos & 31);
@@ -73,11 +66,11 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
                 continue;
 
             int rankStart = (int)RankStarts[level];
-            int block = word / RankSampleWords;
+            int block = word / BbHashShared.RankSampleWords;
             uint prefix = RankPrefixes[rankStart + block];
 
             uint withinBlock = 0;
-            int blockStart = block * RankSampleWords;
+            int blockStart = block * BbHashShared.RankSampleWords;
 
             for (int w = blockStart; w < word; w++)
                 withinBlock += (uint)BitOperations.PopCount(BitsetWords[bitsetStart + w]);
@@ -92,31 +85,25 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
     }
 
     /// <inheritdoc />
-    public uint GetPackedSize()
-    {
-        return sizeof(uint) + // NumKeys
-               sizeof(ulong) + // Seed
-               sizeof(uint) + // Domains length
-               (sizeof(uint) * (uint)Domains.Length) +
-               sizeof(uint) + // Offsets length
-               (sizeof(uint) * (uint)Offsets.Length) +
-               sizeof(uint) + // BitsetStarts length
-               (sizeof(uint) * (uint)BitsetStarts.Length) +
-               sizeof(uint) + // RankStarts length
-               (sizeof(uint) * (uint)RankStarts.Length) +
-               sizeof(uint) + // BitsetWords length
-               (sizeof(uint) * (uint)BitsetWords.Length) +
-               sizeof(uint) + // RankPrefixes length
-               (sizeof(uint) * (uint)RankPrefixes.Length);
-    }
+    public uint GetPackedSize() => sizeof(ulong) + // Seed
+                                    sizeof(uint) + // Domains length
+                                    (sizeof(uint) * (uint)Domains.Length) +
+                                    sizeof(uint) + // Offsets length
+                                   (sizeof(uint) * (uint)Offsets.Length) +
+                                   sizeof(uint) + // BitsetStarts length
+                                   (sizeof(uint) * (uint)BitsetStarts.Length) +
+                                   sizeof(uint) + // RankStarts length
+                                   (sizeof(uint) * (uint)RankStarts.Length) +
+                                   sizeof(uint) + // BitsetWords length
+                                   (sizeof(uint) * (uint)BitsetWords.Length) +
+                                   sizeof(uint) + // RankPrefixes length
+                                   (sizeof(uint) * (uint)RankPrefixes.Length);
 
     /// <inheritdoc />
     public void Pack(Span<byte> buffer)
     {
         SpanWriter sw = new SpanWriter(buffer);
-        sw.WriteUInt32(NumKeys);
         sw.WriteUInt64(Seed);
-
         sw.WriteUInt32Array(Domains);
         sw.WriteUInt32Array(Offsets);
         sw.WriteUInt32Array(BitsetStarts);
@@ -129,11 +116,9 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BbHashMinimalState{TKey}" />.
     /// </summary>
     /// <param name="packed">The serialized hash function.</param>
-    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static BbHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
+    public static BbHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, HashFunc<TKey> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
-        uint numKeys = sr.ReadUInt32();
         ulong seed = sr.ReadUInt64();
 
         uint[] domains = sr.ReadUInt32Array();
@@ -143,6 +128,6 @@ public sealed class BbHashMinimalState<TKey> : IHashState<TKey> where TKey : not
         uint[] bitsetWords = sr.ReadUInt32Array();
         uint[] rankPrefixes = sr.ReadUInt32Array();
 
-        return new BbHashMinimalState<TKey>(numKeys, seed, domains, offsets, bitsetStarts, rankStarts, bitsetWords, rankPrefixes, HashHelper.GetHashFunc(hashFunc));
+        return new BbHashMinimalState<TKey>(seed, domains, offsets, bitsetStarts, rankStarts, bitsetWords, rankPrefixes, hashFunc);
     }
 }

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Genbox.FastMPH.Abstracts;
@@ -11,190 +12,158 @@ namespace Genbox.FastMPH.BBHash;
 /// BBHash is a scalable minimal perfect hash algorithm using a cascade of collision-free bitsets.
 /// </summary>
 [PublicAPI]
-public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHashMinimalState<TKey>, BbHashMinimalSettings>, IPartialHashBuilder<TKey, BbHashMinimalState<TKey>, BbHashMinimalSettings> where TKey : notnull
+public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHashMinimalState<TKey>, BbHashMinimalSettings> where TKey : notnull
 {
-    private const int RankSampleBits = 512;
-    private const int RankSampleWords = RankSampleBits / 32;
-
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out BbHashMinimalState<TKey>? state, BbHashMinimalSettings? settings = null)
-    {
-        PartialBuildStatus status = CreatePartial(keys, hashFunc, seed, out PartialBuildResult<TKey, BbHashMinimalState<TKey>>? result, settings);
-
-        if (status == PartialBuildStatus.Success)
-        {
-            state = result!.State;
-            return true;
-        }
-
-        state = null;
-        return false;
-    }
-
-    /// <summary>
-    /// Create a minimal perfect hash function and return any remaining keys.
-    /// </summary>
-    /// <param name="keys">The keys you want to generate the hash function for.</param>
-    /// <param name="hashFunc">The hash function for keys.</param>
-    /// <param name="settings">Settings for this hash function.</param>
-    /// <param name="result">Contains the constructed state and any remaining keys. Null on failure.</param>
-    /// <returns>Success if all keys are mapped; Partial if some remain; Failure for invalid inputs.</returns>
-    public PartialBuildStatus CreatePartial(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out PartialBuildResult<TKey, BbHashMinimalState<TKey>>? result, BbHashMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out BbHashMinimalState<TKey>? state, BbHashMinimalSettings? settings = null)
     {
         settings ??= new BbHashMinimalSettings();
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
+        if (!TryCreateMinimalState(keys.Length, settings, out IBuildState? buildState))
+        {
+            state = null;
+            return false;
+        }
 
-        BbHashBuildState buildState = new BbHashBuildState();
-
-        return CreatePartialCore(keys, hashCode, settings, seed, buildState, out result);
+        ulong seed = RandomHelper.Next64();
+        return TryCreateMinimalCore(keys, hashFunc, seed, buildState, settings, out state);
     }
 
-    private PartialBuildStatus CreatePartialCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, BbHashMinimalSettings settings, ulong seed, BbHashBuildState buildState, out PartialBuildResult<TKey, BbHashMinimalState<TKey>>? result)
+    /// <inheritdoc />
+    public bool TryCreateMinimalState(int numKeys, BbHashMinimalSettings settings, [NotNullWhen(true)]out IBuildState? state)
     {
+        if (!BuildState.TryCreate(numKeys, settings, out BuildState? typed))
+        {
+            state = null;
+            return false;
+        }
+
+        state = typed;
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, BbHashMinimalSettings settings, [NotNullWhen(true)]out BbHashMinimalState<TKey>? queryState)
+    {
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
+
+        build.Reset();
+
         LogCreating(keys.Length, settings.Gamma, settings.MaxLevels);
 
-        buildState.EnsureForRemaining(keys.Length);
-        int[] remaining = buildState.Remaining;
-
-        for (int i = 0; i < keys.Length; i++)
-            remaining[i] = i;
-
-        int remainingCount = remaining.Length;
+        int remainingCount = keys.Length;
         uint offset = 0;
-
-        List<uint> domains = new List<uint>();
-        List<uint> offsets = new List<uint>();
-        List<uint> bitsetStarts = new List<uint>();
-        List<uint> rankStarts = new List<uint>();
-        List<uint> bitsetWords = new List<uint>();
-        List<uint> rankPrefixes = new List<uint>();
-
-        if (!TryComputeInitialDomain(keys.Length, settings.Gamma, out double domainFloat))
-        {
-            result = null;
-            return PartialBuildStatus.Failure;
-        }
-
-        double collisionProbability = ComputeCollisionProbability(keys.Length, settings.Gamma);
-
         uint level = 0;
+        double domainFloat = build.InitialDomainFloat;
 
-        while (remainingCount > 0 && level < settings.MaxLevels)
+        int initialWordCount = (int)((RoundToBlock((uint)domainFloat) + 31) / 32);
+        uint[] seen = ArrayPool<uint>.Shared.Rent(initialWordCount);
+        uint[] collisions = ArrayPool<uint>.Shared.Rent(initialWordCount);
+
+        try
         {
-            uint domain = RoundToBlock((uint)domainFloat);
-            int wordCount = (int)((domain + 31) / 32);
+            Array.Clear(seen, 0, initialWordCount);
+            Array.Clear(collisions, 0, initialWordCount);
 
-            buildState.EnsureForWords(wordCount);
-            uint[] seen = buildState.Seen;
-            uint[] collisions = buildState.Collisions;
-            Array.Clear(seen, 0, wordCount);
-            Array.Clear(collisions, 0, wordCount);
-
-            LogLevelStart(level, remainingCount, domain);
-
-            for (int i = 0; i < remainingCount; i++)
+            while (remainingCount > 0 && level < settings.MaxLevels)
             {
-                int keyIndex = remaining[i];
-                uint pos = HashHelper.Reduce(BbHashHelper.GetLevelHash(keys[keyIndex], level, seed, hashCode), domain);
+                uint domain = RoundToBlock((uint)domainFloat);
+                int wordCount = (int)((domain + 31) / 32);
 
-                int word = (int)(pos >> 5);
-                uint mask = 1u << (int)(pos & 31);
+                if (wordCount > seen.Length)
+                {
+                    ArrayPool<uint>.Shared.Return(seen);
+                    seen = ArrayPool<uint>.Shared.Rent(wordCount);
+                }
 
-                if ((seen[word] & mask) != 0)
-                    collisions[word] |= mask;
-                else
-                    seen[word] |= mask;
+                if (wordCount > collisions.Length)
+                {
+                    ArrayPool<uint>.Shared.Return(collisions);
+                    collisions = ArrayPool<uint>.Shared.Rent(wordCount);
+                }
+
+                Array.Clear(seen, 0, wordCount);
+                Array.Clear(collisions, 0, wordCount);
+
+                LogLevelStart(level, remainingCount, domain);
+
+                for (int i = 0; i < remainingCount; i++)
+                {
+                    uint pos = HashHelper.Reduce(BbHashShared.GetLevelHash(keys[build.Remaining[i]], level, seed, hashFunc), domain);
+
+                    int word = (int)(pos >> 5);
+                    uint mask = 1u << (int)(pos & 31);
+
+                    if ((seen[word] & mask) != 0)
+                        collisions[word] |= mask;
+                    else
+                        seen[word] |= mask;
+                }
+
+                for (int i = 0; i < wordCount; i++)
+                    seen[i] &= ~collisions[i];
+
+                int nextCount = 0;
+
+                for (int i = 0; i < remainingCount; i++)
+                {
+                    int keyIndex = build.Remaining[i];
+                    uint pos = HashHelper.Reduce(BbHashShared.GetLevelHash(keys[keyIndex], level, seed, hashFunc), domain);
+
+                    int word = (int)(pos >> 5);
+                    uint mask = 1u << (int)(pos & 31);
+
+                    if ((seen[word] & mask) == 0)
+                        build.Remaining[nextCount++] = keyIndex;
+                }
+
+                int placed = remainingCount - nextCount;
+
+                build.Domains.Add(domain);
+                build.Offsets.Add(offset);
+                build.BitsetStarts.Add((uint)build.BitsetWords.Count);
+                build.RankStarts.Add((uint)build.RankPrefixes.Count);
+
+                for (int i = 0; i < wordCount; i++)
+                    build.BitsetWords.Add(seen[i]);
+
+                AppendRankPrefixes(seen, wordCount, build.RankPrefixes);
+
+                offset += (uint)placed;
+                remainingCount = nextCount;
+                LogLevelResult(level, placed, remainingCount);
+
+                level++;
+                domainFloat *= build.CollisionProbability;
             }
 
-            for (int i = 0; i < wordCount; i++)
-                seen[i] &= ~collisions[i];
-
-            int nextCount = 0;
-
-            for (int i = 0; i < remainingCount; i++)
+            if (remainingCount != 0)
             {
-                int keyIndex = remaining[i];
-                uint pos = HashHelper.Reduce(BbHashHelper.GetLevelHash(keys[keyIndex], level, seed, hashCode), domain);
-
-                int word = (int)(pos >> 5);
-                uint mask = 1u << (int)(pos & 31);
-
-                if ((seen[word] & mask) == 0)
-                    remaining[nextCount++] = keyIndex;
+                LogFailure();
+                queryState = null;
+                return false;
             }
-
-            int placed = remainingCount - nextCount;
-
-            domains.Add(domain);
-            offsets.Add(offset);
-            bitsetStarts.Add((uint)bitsetWords.Count);
-            rankStarts.Add((uint)rankPrefixes.Count);
-
-            for (int i = 0; i < wordCount; i++)
-                bitsetWords.Add(seen[i]);
-
-            AppendRankPrefixes(seen, wordCount, rankPrefixes);
-
-            offset += (uint)placed;
-            remainingCount = nextCount;
-            LogLevelResult(level, placed, remainingCount);
-
-            level++;
-            domainFloat *= collisionProbability;
         }
-
-        Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>(remainingCount);
-
-        for (int i = 0; i < remainingCount; i++)
-            remainder[keys[remaining[i]]] = offset + (uint)i;
-
-        if (remainder.Count == 0)
-            LogSuccess(domains.Count);
-        else
-            LogFailure();
-
-        BbHashMinimalState<TKey> state = new BbHashMinimalState<TKey>(
-            numKeys: (uint)keys.Length,
-            seed: seed,
-            domains: domains.ToArray(),
-            offsets: offsets.ToArray(),
-            bitsetStarts: bitsetStarts.ToArray(),
-            rankStarts: rankStarts.ToArray(),
-            bitsetWords: bitsetWords.ToArray(),
-            rankPrefixes: rankPrefixes.ToArray(),
-            hashCode);
-
-        result = new PartialBuildResult<TKey, BbHashMinimalState<TKey>>(state, remainder);
-        return remainder.Count == 0 ? PartialBuildStatus.Success : PartialBuildStatus.Partial;
-    }
-
-    private sealed class BbHashBuildState
-    {
-        public int[] Remaining = [];
-        public uint[] Seen = [];
-        public uint[] Collisions = [];
-
-        public void EnsureForRemaining(int count)
+        finally
         {
-            ArrayEnsure.EnsureCapacity(ref Remaining, count);
+            ArrayPool<uint>.Shared.Return(seen);
+            ArrayPool<uint>.Shared.Return(collisions);
         }
 
-        public void EnsureForWords(int count)
-        {
-            ArrayEnsure.EnsureCapacity(ref Seen, count);
-            ArrayEnsure.EnsureCapacity(ref Collisions, count);
-        }
-    }
+        LogSuccess(build.Domains.Count);
 
-    private static bool TryComputeInitialDomain(int numKeys, double gamma, out double domainFloat)
-    {
-        domainFloat = Math.Ceiling(numKeys * gamma);
+        queryState = new BbHashMinimalState<TKey>(
+            seed,
+            build.Domains.ToArray(),
+            build.Offsets.ToArray(),
+            build.BitsetStarts.ToArray(),
+            build.RankStarts.ToArray(),
+            build.BitsetWords.ToArray(),
+            build.RankPrefixes.ToArray(),
+            hashFunc);
 
-        if (double.IsNaN(domainFloat) || double.IsInfinity(domainFloat))
-            return false;
-
-        return domainFloat <= (uint.MaxValue - 31.0);
+        return true;
     }
 
     private static void AppendRankPrefixes(uint[] bitsetWords, int wordCount, List<uint> rankPrefixes)
@@ -203,25 +172,80 @@ public sealed partial class BbHashBuilder<TKey> : IMinimalHashBuilder<TKey, BbHa
 
         for (int i = 0; i < wordCount; i++)
         {
-            if ((i % RankSampleWords) == 0)
+            if (i % BbHashShared.RankSampleWords == 0)
                 rankPrefixes.Add(sum);
 
             sum += (uint)BitOperations.PopCount(bitsetWords[i]);
         }
     }
 
-    private static double ComputeCollisionProbability(int numKeys, double gamma)
-    {
-        if (numKeys <= 1)
-            return 0.0;
-
-        double gammaN = gamma * numKeys;
-        return 1.0 - Math.Pow((gammaN - 1.0) / gammaN, numKeys - 1);
-    }
-
     private static uint RoundToBlock(uint value)
     {
         uint rounded = (value + 31) & ~31u;
         return rounded == 0 ? 32u : rounded;
+    }
+
+    private sealed class BuildState : IBuildState
+    {
+        public double InitialDomainFloat;
+        public double CollisionProbability;
+        public int[] Remaining = [];
+        public List<uint> Domains = [];
+        public List<uint> Offsets = [];
+        public List<uint> BitsetStarts = [];
+        public List<uint> RankStarts = [];
+        public List<uint> BitsetWords = [];
+        public List<uint> RankPrefixes = [];
+
+        public static bool TryCreate(int numKeys, BbHashMinimalSettings settings, [NotNullWhen(true)]out BuildState? state)
+        {
+            double domainFloat = Math.Ceiling(numKeys * settings.Gamma);
+
+            if (double.IsNaN(domainFloat) || double.IsInfinity(domainFloat) || domainFloat > uint.MaxValue - 31.0)
+            {
+                state = null;
+                return false;
+            }
+
+            double collisionProbability = ComputeCollisionProbability(numKeys, settings.Gamma);
+
+            state = new BuildState
+            {
+                InitialDomainFloat = domainFloat,
+                CollisionProbability = collisionProbability,
+                Remaining = GC.AllocateUninitializedArray<int>(numKeys),
+                Domains = new List<uint>((numKeys / 8) + 1),
+                Offsets = new List<uint>((numKeys / 8) + 1),
+                BitsetStarts = new List<uint>((numKeys / 8) + 1),
+                RankStarts = new List<uint>((numKeys / 8) + 1),
+                BitsetWords = new List<uint>(numKeys + 1),
+                RankPrefixes = new List<uint>(numKeys + 1)
+            };
+
+            state.Reset();
+            return true;
+        }
+
+        private static double ComputeCollisionProbability(int numKeys, double gamma)
+        {
+            if (numKeys <= 1)
+                return 0.0;
+
+            double gammaN = gamma * numKeys;
+            return 1.0 - Math.Pow((gammaN - 1.0) / gammaN, numKeys - 1);
+        }
+
+        public void Reset()
+        {
+            for (int i = 0; i < Remaining.Length; i++)
+                Remaining[i] = i;
+
+            Domains.Clear();
+            Offsets.Clear();
+            BitsetStarts.Clear();
+            RankStarts.Clear();
+            BitsetWords.Clear();
+            RankPrefixes.Clear();
+        }
     }
 }

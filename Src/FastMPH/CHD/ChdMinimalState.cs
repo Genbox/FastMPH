@@ -1,15 +1,16 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.CHD.Internal;
+using Genbox.FastMPH.Internals;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.CHD;
 
 /// <summary>Contains the state of a CHD minimal perfect hash function</summary>
 [PublicAPI]
-public sealed class ChdMinimalState<TKey> : IHashState<TKey> where TKey : notnull
+public sealed class ChdMinimalState<TKey> : IQueryState<TKey> where TKey : notnull
 {
-    private readonly CompressedRank _rank;
     private readonly ChdState<TKey> _state;
+    private readonly CompressedRank _rank;
 
     internal ChdMinimalState(ChdState<TKey> state, CompressedRank rank)
     {
@@ -39,8 +40,7 @@ public sealed class ChdMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="ChdMinimalState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static ChdMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
+    public static ChdMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, HashFunc<TKey> hashFunc)
     {
         ChdState<TKey> state = ChdState<TKey>.Unpack(packed, hashFunc);
         packed = packed[(int)state.GetPackedSize()..];

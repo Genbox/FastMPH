@@ -1,23 +1,22 @@
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
-using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
 
 namespace Genbox.FastMPH.CHM;
 
 /// <summary>Contains the state of a CHM minimal perfect hash function</summary>
 [PublicAPI]
-public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnull
+public sealed class ChmMinimalState<TKey> : IQueryState<TKey> where TKey : notnull
 {
-    private readonly HashCode<TKey> _hashCode;
+    private readonly HashFunc<TKey> _hashFunc;
 
-    internal ChmMinimalState(uint numVertices, uint numEdges, uint[] lookupTable, ulong seed, HashCode<TKey> hashCode)
+    internal ChmMinimalState(uint numVertices, uint numEdges, uint[] lookupTable, ulong seed, HashFunc<TKey> hashFunc)
     {
-        _hashCode = hashCode;
         NumVertices = numVertices;
         NumEdges = numEdges;
         LookupTable = lookupTable;
         Seed = seed;
+        _hashFunc = hashFunc;
     }
 
     /// <summary>The number of vertices in the graph</summary>
@@ -35,7 +34,7 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        ulong h = _hashCode(key, Seed);
+        ulong h = _hashFunc(key, Seed);
         uint h1 = (uint)h % NumVertices;
         uint h2 = (uint)(h >> 32) % NumVertices;
 
@@ -66,8 +65,7 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="ChmMinimalState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static ChmMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
+    public static ChmMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, HashFunc<TKey> hashFunc)
     {
         SpanReader sw = new SpanReader(packed);
         uint numVertices = sw.ReadUInt32();
@@ -75,6 +73,6 @@ public sealed class ChmMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         ulong seed = sw.ReadUInt64();
         uint[] lookupTable = sw.ReadUInt32Array();
 
-        return new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed, HashHelper.GetHashFunc(hashFunc));
+        return new ChmMinimalState<TKey>(numVertices, numEdges, lookupTable, seed, hashFunc);
     }
 }

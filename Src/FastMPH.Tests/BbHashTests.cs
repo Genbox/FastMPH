@@ -1,34 +1,25 @@
 using Genbox.FastMPH.BBHash;
-using Genbox.FastMPH.Abstracts;
+using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Genbox.FastMPH.Tests;
 
 public class BbHashTests
 {
-    private static readonly Func<int, ulong> _intHash = value => unchecked((ulong)value);
-    private static readonly Func<string, ulong> _ordinalIgnoreCaseHash = value => unchecked((ulong)StringComparer.OrdinalIgnoreCase.GetHashCode(value));
+    private static readonly HashFunc<int> _intHash = static (value, seed) => unchecked((ulong)value * seed);
+    private static readonly HashFunc<string> _ordinalIgnoreCaseHash = static (value, seed) => unchecked((ulong)StringComparer.OrdinalIgnoreCase.GetHashCode(value) * seed);
 
     [Fact]
-    public void HashCollisionReturnsPartial()
+    public void HashCollisionReturnsFailure()
     {
         ulong[] values = [0UL, 1UL];
         BbHashBuilder<ulong> builder = new BbHashBuilder<ulong>(NullLogger<BbHashBuilder<ulong>>.Instance);
 
         // Force a collision by returning the same hash for both values
-        Func<ulong, ulong> collidingHash = _ => 42UL;
+        HashFunc<ulong> collidingHash = static (_, _) => 42UL;
 
-        PartialBuildStatus status = builder.CreatePartial(values, collidingHash, 0x517CC1B727220A95UL, out PartialBuildResult<ulong, BbHashMinimalState<ulong>>? result);
-
-        Assert.Equal(PartialBuildStatus.Partial, status);
-        Assert.NotNull(result);
         Assert.False(builder.TryCreateMinimalWithRetry(values, collidingHash, out _));
-
-        Assert.Equal(values.Length, result.Remainder.Count);
-        Assert.Contains(values[0], result.Remainder.Keys);
-        Assert.Contains(values[1], result.Remainder.Keys);
-        Assert.Contains(0u, result.Remainder.Values);
-        Assert.Contains(1u, result.Remainder.Values);
     }
 
     [Fact]
@@ -80,32 +71,18 @@ public class BbHashTests
         Assert.NotNull(state);
         Assert.NotEmpty(state.Domains);
 
-        uint firstLevelPlaced = state.Offsets.Length > 1 ? state.Offsets[1] - state.Offsets[0] : state.NumKeys;
+        uint firstLevelPlaced = state.Offsets.Length > 1 ? state.Offsets[1] - state.Offsets[0] : (uint)values.Length;
         Assert.True(firstLevelPlaced > (uint)(values.Length / 10));
     }
 
     [Fact]
-    public void ReturnsPartialWithRemainderWhenMaxLevelsIsZero()
+    public void ReturnsFailureWhenMaxLevelsIsZero()
     {
         int[] values = Enumerable.Range(100, 64).ToArray();
         BbHashBuilder<int> builder = new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance);
         BbHashMinimalSettings settings = new BbHashMinimalSettings { MaxLevels = 0 };
 
-        PartialBuildStatus status = builder.CreatePartial(values, _intHash, 0x517CC1B727220A95UL, out PartialBuildResult<int, BbHashMinimalState<int>>? result, settings);
-
-        Assert.Equal(PartialBuildStatus.Partial, status);
-        Assert.NotNull(result);
         Assert.False(builder.TryCreateMinimalWithRetry(values, _intHash, out _, settings));
-
-        Assert.Empty(result.State.Domains);
-        Assert.Equal((uint)values.Length, result.State.NumKeys);
-        Assert.Equal(values.Length, result.Remainder.Count);
-
-        HashSet<uint> remainderIndexes = result.Remainder.Values.ToHashSet();
-        Assert.Equal(values.Length, remainderIndexes.Count);
-
-        for (uint i = 0; i < (uint)values.Length; i++)
-            Assert.Contains(i, remainderIndexes);
     }
 
     [Fact]
@@ -130,10 +107,6 @@ public class BbHashTests
         BbHashBuilder<int> builder = new BbHashBuilder<int>(NullLogger<BbHashBuilder<int>>.Instance);
         BbHashMinimalSettings settings = new BbHashMinimalSettings { Gamma = uint.MaxValue };
 
-        PartialBuildStatus status = builder.CreatePartial(values, _intHash, 0x517CC1B727220A95UL, out PartialBuildResult<int, BbHashMinimalState<int>>? result, settings);
-
-        Assert.Equal(PartialBuildStatus.Failure, status);
-        Assert.Null(result);
         Assert.False(builder.TryCreateMinimalWithRetry(values, _intHash, out _, settings));
     }
 }

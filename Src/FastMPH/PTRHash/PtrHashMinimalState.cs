@@ -7,10 +7,10 @@ namespace Genbox.FastMPH.PTRHash;
 
 /// <summary>Contains the state of a PTRHash-style minimal perfect hash function.</summary>
 [PublicAPI]
-public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : notnull
+public sealed class PtrHashMinimalState<TKey> : IQueryState<TKey> where TKey : notnull
 {
-    private readonly HashCode<TKey> _hashCode;
     private readonly ulong _slotMultiplier;
+    private readonly HashFunc<TKey> _hashFunc;
 
     internal PtrHashMinimalState(
         uint numKeys,
@@ -22,7 +22,7 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
         ulong seed,
         byte[] pilots,
         uint[] remap,
-        HashCode<TKey> hashCode)
+        HashFunc<TKey> hashFunc)
     {
         NumKeys = numKeys;
         NumSlots = numSlots;
@@ -33,8 +33,8 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
         Seed = seed;
         Pilots = pilots;
         Remap = remap;
-        _hashCode = hashCode;
         _slotMultiplier = ComputeFastModMultiplier(slotsPerPart);
+        _hashFunc = hashFunc;
     }
 
     /// <summary>The number of keys in the original set.</summary>
@@ -70,8 +70,8 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
         if (Pilots.Length == 0)
             return 0;
 
-        ulong h = _hashCode(key, Seed);
-        ulong highHash = Mix64(h ^ 0x9E3779B97F4A7C15UL);
+        ulong h = _hashFunc(key, Seed);
+        ulong highHash = HashHelper.Mix64(h ^ 0x9E3779B97F4A7C15UL);
 
         uint part;
         uint bucket;
@@ -89,7 +89,7 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
 
         byte pilot = Pilots[bucket];
 
-        uint slotInPart = ReduceFastMod32(Mix64(h + 0xD6E8FEB86659FD93UL) ^ PilotMix(pilot, Seed), SlotsPerPart, _slotMultiplier);
+        uint slotInPart = ReduceFastMod32(HashHelper.Mix64(h + 0xD6E8FEB86659FD93UL) ^ PilotMix(pilot, Seed), SlotsPerPart, _slotMultiplier);
         uint slot = (part * SlotsPerPart) + slotInPart;
 
         if (slot < NumKeys)
@@ -104,20 +104,17 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
     }
 
     /// <inheritdoc />
-    public uint GetPackedSize()
-    {
-        return sizeof(uint) + // NumKeys
-               sizeof(uint) + // NumSlots
-               sizeof(uint) + // NumParts
-               sizeof(uint) + // SlotsPerPart
-               sizeof(uint) + // BucketsPerPart
-               sizeof(byte) + // BucketFunction
-               sizeof(ulong) + // Seed
-               sizeof(uint) + // Pilots length
-               (uint)Pilots.Length +
-               sizeof(uint) + // Remap length
-               (sizeof(uint) * (uint)Remap.Length);
-    }
+    public uint GetPackedSize() => sizeof(uint) + // NumKeys
+                                   sizeof(uint) + // NumSlots
+                                   sizeof(uint) + // NumParts
+                                   sizeof(uint) + // SlotsPerPart
+                                   sizeof(uint) + // BucketsPerPart
+                                   sizeof(byte) + // BucketFunction
+                                   sizeof(ulong) + // Seed
+                                   sizeof(uint) + // Pilots length
+                                   (uint)Pilots.Length +
+                                   sizeof(uint) + // Remap length
+                                   (sizeof(uint) * (uint)Remap.Length);
 
     /// <inheritdoc />
     public void Pack(Span<byte> buffer)
@@ -138,8 +135,7 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
     /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="PtrHashMinimalState{TKey}" />.
     /// </summary>
     /// <param name="packed">The serialized hash function.</param>
-    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static PtrHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
+    public static PtrHashMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, HashFunc<TKey> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
         uint numKeys = sr.ReadUInt32();
@@ -152,7 +148,7 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
         byte[] pilots = sr.ReadByteArray();
         uint[] remap = sr.ReadUInt32Array();
 
-        return new PtrHashMinimalState<TKey>(numKeys, numSlots, numParts, slotsPerPart, bucketsPerPart, bucketFunction, seed, pilots, remap, HashHelper.GetHashFunc(hashFunc));
+        return new PtrHashMinimalState<TKey>(numKeys, numSlots, numParts, slotsPerPart, bucketsPerPart, bucketFunction, seed, pilots, remap, hashFunc);
     }
 
     private static uint Reduce(ulong hash, uint range) => (uint)Math.BigMul(hash, range, out _);
@@ -173,27 +169,11 @@ public sealed class PtrHashMinimalState<TKey> : IHashState<TKey> where TKey : no
 
     private static ulong PilotMix(byte pilot, ulong seed) => unchecked(0x517CC1B727220A95UL * (pilot ^ seed));
 
-    private static ulong ApplyBucketFunction(ulong hash, PtrHashBucketFunction bucketFunction)
+    private static ulong ApplyBucketFunction(ulong hash, PtrHashBucketFunction bucketFunction) => bucketFunction switch
     {
-        return bucketFunction switch
-        {
-            PtrHashBucketFunction.Linear => hash,
-            PtrHashBucketFunction.SquareEps => (Math.BigMul(hash, hash, out _) / 256UL * 255UL) + (hash / 256UL),
-            PtrHashBucketFunction.CubicEps => (Math.BigMul(Math.BigMul(hash, hash, out _), (hash >> 1) | (1UL << 63), out _) / 256UL * 255UL) + (hash / 256UL),
-            _ => hash
-        };
-    }
-
-    private static ulong Mix64(ulong x)
-    {
-        unchecked
-        {
-            x ^= x >> 33;
-            x *= 0xff51afd7ed558ccdUL;
-            x ^= x >> 33;
-            x *= 0xc4ceb9fe1a85ec53UL;
-            x ^= x >> 33;
-            return x;
-        }
-    }
+        PtrHashBucketFunction.Linear => hash,
+        PtrHashBucketFunction.SquareEps => (Math.BigMul(hash, hash, out _) / 256UL * 255UL) + (hash / 256UL),
+        PtrHashBucketFunction.CubicEps => (Math.BigMul(Math.BigMul(hash, hash, out _), (hash >> 1) | (1UL << 63), out _) / 256UL * 255UL) + (hash / 256UL),
+        _ => hash
+    };
 }

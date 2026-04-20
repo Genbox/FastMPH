@@ -7,18 +7,18 @@ namespace Genbox.FastMPH.Hyble;
 
 /// <summary>Contains the state of a Hyble perfect hash function.</summary>
 [PublicAPI]
-public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
+public sealed class HybleState<TKey> : IQueryState<TKey> where TKey : notnull
 {
-    private readonly HashCode<TKey> _hashCode;
     private readonly uint _bucketMask;
+    private readonly HashFunc<TKey> _hashFunc;
 
-    internal HybleState(uint approxRange, ulong seed, ushort[] displacements, HashCode<TKey> hashCode)
+    internal HybleState(uint approxRange, ulong seed, ushort[] displacements, HashFunc<TKey> hashFunc)
     {
         ApproxRange = approxRange;
         Seed = seed;
         Displacements = displacements;
         _bucketMask = (uint)displacements.Length - 1;
-        _hashCode = hashCode;
+        _hashFunc = hashFunc;
     }
 
     /// <summary>Upper bound used for the approximate range.</summary>
@@ -33,7 +33,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     /// <inheritdoc />
     public uint Search(TKey key)
     {
-        ulong hash = _hashCode(key, Seed);
+        ulong hash = _hashFunc(key, Seed);
         return SearchHash(hash);
     }
 
@@ -51,11 +51,11 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
 
     /// <summary>
     /// Get packed size for the format:
-    /// <c>[ApproxRange:u32][Seed:u32][DisplacementsLength:u32][Displacements:u16[]]</c>.
+    /// <c>[ApproxRange:u32][Seed:u64][DisplacementsLength:u32][Displacements:u16[]]</c>.
     /// </summary>
-    public uint GetPackedSize() => sizeof(uint) + // ApproxRange
-                                   sizeof(ulong) + // Seed
-                                   sizeof(uint) + // Displacements length
+    public uint GetPackedSize() => sizeof(uint) +
+                                   sizeof(ulong) +
+                                   sizeof(uint) +
                                    ((uint)Displacements.Length * sizeof(ushort));
 
     /// <summary>
@@ -73,8 +73,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
     /// Deserialize a serialized perfect hash function into a new instance of <see cref="HybleState{TKey}" />.
     /// </summary>
     /// <param name="packed">The serialized hash function.</param>
-    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static HybleState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
+    public static HybleState<TKey> Unpack(ReadOnlySpan<byte> packed, HashFunc<TKey> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
         uint approxRange = sr.ReadUInt32();
@@ -84,7 +83,7 @@ public sealed class HybleState<TKey> : IHashState<TKey> where TKey : notnull
         if (!IsValidState(displacements))
             throw new InvalidOperationException("Packed Hyble state invariants are invalid");
 
-        return new HybleState<TKey>(approxRange, seed, displacements, HashHelper.GetHashFunc(hashFunc));
+        return new HybleState<TKey>(approxRange, seed, displacements, hashFunc);
     }
 
     private static bool IsValidState(ushort[] displacements)

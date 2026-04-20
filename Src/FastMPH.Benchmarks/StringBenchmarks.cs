@@ -1,7 +1,6 @@
 using System.Collections.Frozen;
 using System.Reflection;
 using BenchmarkDotNet.Order;
-using Genbox.FastMPH;
 using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.Benchmarks.Misc;
 using Genbox.FastMPH.BBHash;
@@ -25,7 +24,7 @@ public class StringBenchmarks
 
     public delegate uint QFunc(string data);
 
-    private static readonly Func<string, ulong> _stringHash = value => unchecked((ulong)value.GetHashCode());
+    private static readonly HashFunc<string> _stringHash = (value, seed) => unchecked((ulong)value.GetHashCode() ^ seed);
 
     private string[] _data = null!;
     private string _query = null!;

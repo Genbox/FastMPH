@@ -14,173 +14,124 @@ namespace Genbox.FastMPH.Hyble;
 /// This implementation assumes full-avalanche hash quality and uses a 32-bit seeded hash pipeline.
 /// </summary>
 [PublicAPI]
-public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<TKey>, HybleSettings>, IPartialHashBuilder<TKey, HybleState<TKey>, HybleSettings> where TKey : notnull
+public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<TKey>, HybleSettings> where TKey : notnull
 {
     private const uint MaxDisplacementBase = ushort.MaxValue - 64;
 
     /// <inheritdoc />
-    public bool TryCreate(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out HybleState<TKey>? state, HybleSettings? settings = null)
-    {
-        PartialBuildStatus status = CreatePartial(keys, hashFunc, seed, out PartialBuildResult<TKey, HybleState<TKey>>? result, settings);
-
-        if (status == PartialBuildStatus.Success)
-        {
-            state = result!.State;
-            return true;
-        }
-
-        state = null;
-        return false;
-    }
-
-    /// <inheritdoc />
-    public PartialBuildStatus CreatePartial(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, out PartialBuildResult<TKey, HybleState<TKey>>? result, HybleSettings? settings = null)
+    public bool TryCreate(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out HybleState<TKey>? state, HybleSettings? settings = null)
     {
         settings ??= new HybleSettings();
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
+        if (!TryCreateState(keys.Length, settings, out IBuildState? buildState))
+        {
+            state = null;
+            return false;
+        }
 
-        HybleBuildState buildState = new HybleBuildState();
-
-        return CreatePartialCore(keys, hashCode, settings, seed, buildState, out result);
+        ulong seed = RandomHelper.Next64();
+        return TryCreateCore(keys, hashFunc, seed, buildState, settings, out state);
     }
 
-    private PartialBuildStatus CreatePartialCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, HybleSettings settings, ulong seed, HybleBuildState buildState, out PartialBuildResult<TKey, HybleState<TKey>>? result)
+    /// <inheritdoc />
+    public bool TryCreateState(int numKeys, HybleSettings settings, [NotNullWhen(true)]out IBuildState? state)
     {
-        result = null;
-
-        // Keep the 32-bit data limitation explicit to match the Rust implementation.
-        if (keys.Length > (int.MaxValue / 2))
-            return PartialBuildStatus.Failure;
-
-        uint numKeys = (uint)keys.Length;
-
-        if (numKeys == 0)
+        if (!BuildState.TryCreate(numKeys, settings, out BuildState? typed))
         {
-            HybleState<TKey> emptyState = new HybleState<TKey>(1, 0, [0], hashCode);
-            result = new PartialBuildResult<TKey, HybleState<TKey>>(emptyState, new Dictionary<TKey, uint>());
-            return PartialBuildStatus.Success;
+            state = null;
+            return false;
         }
 
-        if (!TryComputeApproxRange(numKeys, out uint approxRange))
-            return PartialBuildStatus.Failure;
+        state = typed;
+        return true;
+    }
 
-        if (!TryComputeBucketLayout(numKeys, settings.KeysPerBucket, out uint bucketCount, out uint bucketMask))
-            return PartialBuildStatus.Failure;
-
-        LogCreating(numKeys, approxRange, bucketCount);
-
-        ulong bitmapBits = approxRange + (ulong)ushort.MaxValue;
-        int bitmapByteLength = (int)((bitmapBits + 7) / 8);
-        buildState.EnsureForKeys((int)numKeys);
-        buildState.EnsureForBuckets((int)bucketCount);
-        buildState.EnsureForBitmap(bitmapByteLength);
-
-        uint[] approxs = buildState.Approxs;
-        int[] bucketsByKey = buildState.BucketsByKey;
-        int[] bucketCounts = buildState.BucketCounts;
-        int[] bucketStarts = buildState.BucketStarts;
-        int[] bucketOffsets = buildState.BucketOffsets;
-        int[] bucketKeyIndices = buildState.BucketKeyIndices;
-        int[] bucketOrder = buildState.BucketOrder;
-        byte[] placedBuckets = buildState.PlacedBuckets;
-        ushort[] displacements = buildState.Displacements;
-        byte[] freeBitmap = buildState.FreeBitmap;
-
-        Array.Clear(bucketCounts, 0, bucketCounts.Length);
-
-        for (int i = 0; i < numKeys; i++)
+    /// <inheritdoc />
+    public bool TryCreateCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, HybleSettings settings, [NotNullWhen(true)]out HybleState<TKey>? queryState)
+    {
+        if (keys.Length == 0)
         {
-            ulong hash = hashCode(keys[i], seed);
-            (uint approx, int bucket) = ToApproxBucket(hash, approxRange, bucketMask);
-            approxs[i] = approx;
-            bucketsByKey[i] = bucket;
-            bucketCounts[bucket]++;
+            queryState = new HybleState<TKey>(1, 0, [0], hashFunc);
+            return true;
         }
 
-        bucketStarts[0] = 0;
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
 
-        for (int i = 0; i < bucketCount; i++)
+        LogCreating(keys.Length, build.ApproxRange, build.BucketCount);
+
+        Array.Clear(build.BucketCounts, 0, build.BucketCounts.Length);
+
+        for (int i = 0; i < keys.Length; i++)
         {
-            bucketStarts[i + 1] = bucketStarts[i] + bucketCounts[i];
-            bucketOffsets[i] = bucketStarts[i];
-            bucketOrder[i] = i;
+            ulong hash = hashFunc(keys[i], seed);
+            (uint approx, int bucket) = ToApproxBucket(hash, build.ApproxRange, build.BucketMask);
+            build.Approxs[i] = approx;
+            build.BucketsByKey[i] = bucket;
+            build.BucketCounts[bucket]++;
         }
 
-        for (int i = 0; i < numKeys; i++)
+        build.BucketStarts[0] = 0;
+
+        for (int i = 0; i < build.BucketCount; i++)
         {
-            int bucket = bucketsByKey[i];
-            int offset = bucketOffsets[bucket]++;
-            bucketKeyIndices[offset] = i;
+            build.BucketStarts[i + 1] = build.BucketStarts[i] + build.BucketCounts[i];
+            build.BucketOffsets[i] = build.BucketStarts[i];
+            build.BucketOrder[i] = i;
         }
 
-        if (HasApproxCollision(bucketStarts, bucketCounts, bucketKeyIndices, approxs))
+        for (int i = 0; i < keys.Length; i++)
+        {
+            int bucket = build.BucketsByKey[i];
+            int offset = build.BucketOffsets[bucket]++;
+            build.BucketKeyIndices[offset] = i;
+        }
+
+        if (HasApproxCollision(build.BucketStarts, build.BucketCounts, build.BucketKeyIndices, build.Approxs))
         {
             LogFailure();
-
-            Array.Clear(displacements, 0, displacements.Length);
-            result = BuildPartialResult(keys, bucketsByKey, placedBuckets, approxRange, seed, displacements, hashCode);
-            return PartialBuildStatus.Partial;
+            queryState = null;
+            return false;
         }
 
-        Array.Sort(bucketOrder, (a, b) =>
+        Array.Sort(build.BucketOrder, (a, b) =>
         {
-            int sizeCompare = bucketCounts[b].CompareTo(bucketCounts[a]);
+            int sizeCompare = build.BucketCounts[b].CompareTo(build.BucketCounts[a]);
             return sizeCompare != 0 ? sizeCompare : a.CompareTo(b);
         });
 
-        Array.Clear(displacements, 0, displacements.Length);
-        Array.Clear(placedBuckets, 0, placedBuckets.Length);
-        for (int i = 0; i < freeBitmap.Length; i++)
-            freeBitmap[i] = byte.MaxValue;
+        Array.Clear(build.Displacements, 0, build.Displacements.Length);
+        Array.Clear(build.PlacedBuckets, 0, build.PlacedBuckets.Length);
+        for (int i = 0; i < build.FreeBitmap.Length; i++)
+            build.FreeBitmap[i] = byte.MaxValue;
 
-        for (int order = 0; order < bucketOrder.Length; order++)
+        for (int order = 0; order < build.BucketOrder.Length; order++)
         {
-            int bucket = bucketOrder[order];
-            int size = bucketCounts[bucket];
+            int bucket = build.BucketOrder[order];
+            int size = build.BucketCounts[bucket];
 
             if (size == 0)
                 continue;
 
-            if (!TryFindDisplacement(bucket, bucketStarts, bucketCounts, bucketKeyIndices, approxs, freeBitmap, settings.DisplacementSearchStride, out ushort displacement))
+            if (!TryFindDisplacement(bucket, build.BucketStarts, build.BucketCounts, build.BucketKeyIndices, build.Approxs, build.FreeBitmap, settings.DisplacementSearchStride, out ushort displacement))
             {
                 LogBucketFailure(bucket, size);
                 LogFailure();
-
-                result = BuildPartialResult(keys, bucketsByKey, placedBuckets, approxRange, seed, displacements, hashCode);
-                return PartialBuildStatus.Partial;
+                queryState = null;
+                return false;
             }
 
-            displacements[bucket] = displacement;
-            placedBuckets[bucket] = 1;
-            MarkBucketAsUsed(bucket, bucketStarts, bucketCounts, bucketKeyIndices, approxs, displacement, freeBitmap);
+            build.Displacements[bucket] = displacement;
+            build.PlacedBuckets[bucket] = 1;
+            MarkBucketAsUsed(bucket, build.BucketStarts, build.BucketCounts, build.BucketKeyIndices, build.Approxs, displacement, build.FreeBitmap);
         }
 
-        HybleState<TKey> state = new HybleState<TKey>(approxRange, seed, displacements, hashCode);
-        result = new PartialBuildResult<TKey, HybleState<TKey>>(state, new Dictionary<TKey, uint>());
+        ushort[] displacements = GC.AllocateUninitializedArray<ushort>(build.Displacements.Length);
+        Array.Copy(build.Displacements, displacements, displacements.Length);
+
+        queryState = new HybleState<TKey>(build.ApproxRange, seed, displacements, hashFunc);
         LogSuccess(seed, displacements.Length - 1);
-        return PartialBuildStatus.Success;
-    }
-
-    private static PartialBuildResult<TKey, HybleState<TKey>> BuildPartialResult(ReadOnlySpan<TKey> keys, int[] bucketsByKey, byte[] placedBuckets, uint approxRange, ulong seed, ushort[] displacements, HashCode<TKey> hashCode)
-    {
-        HybleState<TKey> state = new HybleState<TKey>(approxRange, seed, displacements, hashCode);
-
-        Dictionary<TKey, uint> remainder = new Dictionary<TKey, uint>();
-        uint remainderIndex = approxRange + ushort.MaxValue;
-
-        for (int i = 0; i < keys.Length; i++)
-        {
-            int bucket = bucketsByKey[i];
-
-            if (placedBuckets[bucket] != 0)
-                continue;
-
-            remainder[keys[i]] = remainderIndex;
-            remainderIndex++;
-        }
-
-        return new PartialBuildResult<TKey, HybleState<TKey>>(state, remainder);
+        return true;
     }
 
     private static bool HasApproxCollision(int[] bucketStarts, int[] bucketCounts, int[] bucketKeyIndices, uint[] approxs)
@@ -285,23 +236,18 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
 
     private static bool TryComputeApproxRange(uint numKeys, out uint approxRange)
     {
-        // Use different load factors for different sizes. This was tuned experimentally. We used to
-        // increase `approx_range` after each failure to improve the chances of success, but that
-        // doesn't seem necessary.
         uint percent = DivCeil(numKeys, 100);
         uint coeff = Math.Min(DivCeil(numKeys, 1_000_000), 5u);
         ulong approxRange64 = numKeys + ((ulong)coeff * percent);
 
         if (approxRange64 < numKeys)
         {
-            //Hash space too small
             approxRange = 0;
             return false;
         }
 
         if (approxRange64 > int.MaxValue - ushort.MaxValue)
         {
-            //approx_range too large
             approxRange = 0;
             return false;
         }
@@ -312,8 +258,11 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
 
     private static uint DivCeil(uint a, uint b) => (a + b - 1) / b;
 
-    private sealed class HybleBuildState
+    private sealed class BuildState : IBuildState
     {
+        public uint ApproxRange;
+        public uint BucketCount;
+        public uint BucketMask;
         public uint[] Approxs = [];
         public int[] BucketsByKey = [];
         public int[] BucketCounts = [];
@@ -325,26 +274,74 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
         public ushort[] Displacements = [];
         public byte[] FreeBitmap = [];
 
-        public void EnsureForKeys(int numKeys)
+        public static bool TryCreate(int keysLength, HybleSettings settings, [NotNullWhen(true)]out BuildState? state)
         {
-            ArrayEnsure.EnsureCapacity(ref Approxs, numKeys);
-            ArrayEnsure.EnsureCapacity(ref BucketsByKey, numKeys);
-            ArrayEnsure.EnsureCapacity(ref BucketKeyIndices, numKeys);
+            state = null;
+
+            if (keysLength > int.MaxValue / 2)
+                return false;
+
+            uint numKeys = (uint)keysLength;
+
+            if (numKeys == 0)
+            {
+                ulong emptyBitmapBits = 1 + (ulong)ushort.MaxValue;
+                int emptyBitmapByteLength = (int)((emptyBitmapBits + 7) / 8);
+
+                state = new BuildState
+                {
+                    ApproxRange = 1,
+                    BucketCount = 1,
+                    BucketMask = 0,
+                    Approxs = [],
+                    BucketsByKey = [],
+                    BucketKeyIndices = [],
+                    BucketCounts = GC.AllocateUninitializedArray<int>(1),
+                    BucketStarts = GC.AllocateUninitializedArray<int>(2),
+                    BucketOffsets = GC.AllocateUninitializedArray<int>(1),
+                    BucketOrder = GC.AllocateUninitializedArray<int>(1),
+                    PlacedBuckets = GC.AllocateUninitializedArray<byte>(1),
+                    Displacements = GC.AllocateUninitializedArray<ushort>(1),
+                    FreeBitmap = GC.AllocateUninitializedArray<byte>(emptyBitmapByteLength)
+                };
+
+                return true;
+            }
+
+            if (!TryComputeApproxRange(numKeys, out uint approxRange))
+                return false;
+
+            if (!TryComputeBucketLayout(numKeys, settings.KeysPerBucket, out uint bucketCount, out uint bucketMask))
+                return false;
+
+            ulong bitmapBits = approxRange + (ulong)ushort.MaxValue;
+            int bitmapByteLength = (int)((bitmapBits + 7) / 8);
+
+            state = new BuildState
+            {
+                ApproxRange = approxRange,
+                BucketCount = bucketCount,
+                BucketMask = bucketMask,
+                Approxs = GC.AllocateUninitializedArray<uint>((int)numKeys),
+                BucketsByKey = GC.AllocateUninitializedArray<int>((int)numKeys),
+                BucketKeyIndices = GC.AllocateUninitializedArray<int>((int)numKeys),
+                BucketCounts = GC.AllocateUninitializedArray<int>((int)bucketCount),
+                BucketStarts = GC.AllocateUninitializedArray<int>((int)bucketCount + 1),
+                BucketOffsets = GC.AllocateUninitializedArray<int>((int)bucketCount),
+                BucketOrder = GC.AllocateUninitializedArray<int>((int)bucketCount),
+                PlacedBuckets = GC.AllocateUninitializedArray<byte>((int)bucketCount),
+                Displacements = GC.AllocateUninitializedArray<ushort>((int)bucketCount),
+                FreeBitmap = GC.AllocateUninitializedArray<byte>(bitmapByteLength)
+            };
+
+            return true;
         }
 
-        public void EnsureForBuckets(int bucketCount)
+        public void Reset()
         {
-            ArrayEnsure.EnsureCapacity(ref BucketCounts, bucketCount);
-            ArrayEnsure.EnsureCapacity(ref BucketStarts, bucketCount + 1);
-            ArrayEnsure.EnsureCapacity(ref BucketOffsets, bucketCount);
-            ArrayEnsure.EnsureCapacity(ref BucketOrder, bucketCount);
-            ArrayEnsure.EnsureCapacity(ref PlacedBuckets, bucketCount);
-            ArrayEnsure.EnsureCapacity(ref Displacements, bucketCount);
-        }
-
-        public void EnsureForBitmap(int bitmapByteLength)
-        {
-            ArrayEnsure.EnsureCapacity(ref FreeBitmap, bitmapByteLength);
+            Array.Clear(BucketCounts, 0, BucketCounts.Length);
+            Array.Clear(BucketOffsets, 0, BucketOffsets.Length);
+            Array.Clear(PlacedBuckets, 0, PlacedBuckets.Length);
         }
     }
 }

@@ -7,16 +7,16 @@ namespace Genbox.FastMPH.BDZ;
 
 /// <summary>Contains the state of a BDZ perfect hash function</summary>
 [PublicAPI]
-public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
+public sealed class BdzState<TKey> : IQueryState<TKey> where TKey : notnull
 {
     private readonly HashCode3<TKey> _hashCode;
 
-    internal BdzState(uint numPartitions, byte[] lookupTable, ulong seed, HashCode3<TKey> hashCode)
+    internal BdzState(uint numPartitions, byte[] lookupTable, ulong seed, HashFunc<TKey> hashFunc)
     {
-        _hashCode = hashCode;
         NumPartitions = numPartitions;
         LookupTable = lookupTable;
         Seed = seed;
+        _hashCode = HashHelper.GetHashFunc3(hashFunc);
     }
 
     /// <summary>The number of partitions</summary>
@@ -32,7 +32,6 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
     public uint Search(TKey key)
     {
         Span<uint> hashes = stackalloc uint[3];
-
         _hashCode(key, Seed, hashes);
         hashes[0] = hashes[0] % NumPartitions;
         hashes[1] = (hashes[1] % NumPartitions) + NumPartitions;
@@ -60,30 +59,22 @@ public sealed class BdzState<TKey> : IHashState<TKey> where TKey : notnull
     }
 
     /// <inheritdoc />
-    public uint GetPackedSize()
-    {
-        uint size = sizeof(ulong) + //Seed
-                    sizeof(uint) + //NumPartitions
-                    sizeof(uint) + //LookupTable length
-                    (sizeof(byte) * (uint)LookupTable.Length); //LookupTable
-
-        return size;
-    }
+    public uint GetPackedSize() => sizeof(ulong) + //Seed
+                                   sizeof(uint) + //NumPartitions
+                                   sizeof(uint) + //LookupTable length
+                                   (sizeof(byte) * (uint)LookupTable.Length);
 
     /// <summary>
     /// Deserialize a serialized perfect hash function into a new instance of <see cref="BdzState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static BdzState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
+    public static BdzState<TKey> Unpack(ReadOnlySpan<byte> packed, HashFunc<TKey> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
-
         ulong seed = sr.ReadUInt64();
         uint numPartitions = sr.ReadUInt32();
-
         byte[] lookupTable = sr.ReadByteArray();
 
-        return new BdzState<TKey>(numPartitions, lookupTable, seed, HashHelper.GetHashFunc3(hashFunc));
+        return new BdzState<TKey>(numPartitions, lookupTable, seed, hashFunc);
     }
 }

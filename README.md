@@ -131,29 +131,33 @@ Benchmarks are sorted from fastest to slowest. It is testing construction on 100
 * 'FrozenDict' is the .NET FrozenDictionary.
 * `_M` means it is the minimal variant of the hash function.
 
-| Method    | Name       | BitsPerItem |                Mean |  Allocated |
-|-----------|------------|-------------|--------------------:|-----------:|
-| Query     | FrozenDict | 237.05      |           0.7450 ns |          - |
-| Query     | Hyble      | 5.24        |           1.5592 ns |          - |
-| Query     | Dict       | 173.82      |           1.5849 ns |          - |
-| Query     | BMZ_M      | 36.8        |           4.1600 ns |          - |
-| Query     | PTR_M      | 2.99        |           4.8370 ns |          - |
-| Query     | CHM_M      | 66.88       |           5.5118 ns |          - |
-| Query     | FCH_M      | 4.73        |           7.1922 ns |          - |
-| Query     | BDZ        | 1.97        |           9.6764 ns |          - |
-| Query     | BB_M       | 3.52        |          12.5208 ns |          - |
-| Query     | BDZ_M      | 2.77        |          13.1758 ns |          - |
-| Query     | CHD        | 2.98        |          20.3073 ns |          - |
-| Query     | CHD_M      | 6.24        |          47.0493 ns |          - |
-| Construct | Dict       | 173.82      |     962,823.2642 ns |  2172848 B |
-| Construct | BB_M       | 3.52        |   2,808,516.6146 ns |   612712 B |
-| Construct | FrozenDict | 237.05      |   3,350,931.3337 ns |  5936491 B |
-| Construct | CHD        | 2.99        |   4,308,704.6875 ns |  3838711 B |
-| Construct | Hyble      | 5.24        |   4,420,141.0156 ns |  1811418 B |
-| Construct | CHD_M      | 6.25        |   6,337,032.0312 ns |  4679316 B |
-| Construct | BMZ_M      | 36.8        |  16,668,686.8750 ns |  7123774 B |
-| Construct | PTR_M      | 2.99        |  21,343,941.4583 ns |  2646940 B |
-| Construct | BDZ        | 1.97        |  24,401,915.8967 ns | 13099011 B |
-| Construct | BDZ_M      | 2.77        |  25,208,954.4062 ns | 13078269 B |
-| Construct | CHM_M      | 66.88       |  27,335,151.4583 ns |  5961067 B |
-| Construct | FCH_M      | 4.73        | 470,084,043.6170 ns | 76979208 B |
+Old vs New (mean only):
+
+| Method    | Name       |            Old Mean |            New Mean | Speedup vs Old |
+|-----------|------------|--------------------:|--------------------:|----------------|
+| Query     | Hyble      |           1.5592 ns |           0.6164 ns | 2.53x faster   |
+| Query     | FrozenDict |           0.7450 ns |           0.8519 ns | 1.14x slower   |
+| Query     | BMZ_M      |           4.1600 ns |           1.2633 ns | 3.29x faster   |
+| Query     | Dict       |           1.5849 ns |           2.2223 ns | 1.40x slower   |
+| Query     | CHM_M      |           5.5118 ns |           2.4834 ns | 2.22x faster   |
+| Query     | PTR_M      |           4.8370 ns |           3.0940 ns | 1.56x faster   |
+| Query     | BB_M       |          12.5208 ns |           4.0501 ns | 3.09x faster   |
+| Query     | FCH_M      |           7.1922 ns |           5.9919 ns | 1.20x faster   |
+| Query     | BDZ        |           9.6764 ns |           7.0453 ns | 1.37x faster   |
+| Query     | BDZ_M      |          13.1758 ns |          16.2879 ns | 1.24x slower   |
+| Query     | CHD        |          20.3073 ns |          22.6475 ns | 1.12x slower   |
+| Query     | CHD_M      |          47.0493 ns |          41.9196 ns | 1.12x faster   |
+| Construct | Dict       |     962,823.2642 ns |     934,327.3372 ns | 1.03x faster   |
+| Construct | BB_M       |   2,808,516.6146 ns |   2,028,719.7731 ns | 1.38x faster   |
+| Construct | FrozenDict |   3,350,931.3337 ns |   3,186,693.6942 ns | 1.05x faster   |
+| Construct | Hyble      |   4,420,141.0156 ns |   3,680,494.1406 ns | 1.20x faster   |
+| Construct | CHD        |   4,308,704.6875 ns |   3,988,431.7969 ns | 1.08x faster   |
+| Construct | CHD_M      |   6,337,032.0312 ns |   6,249,546.6947 ns | 1.01x faster   |
+| Construct | BMZ_M      |  16,668,686.8750 ns |  20,956,173.7981 ns | 1.26x slower   |
+| Construct | BDZ_M      |  25,208,954.4062 ns |  24,363,787.5319 ns | 1.03x faster   |
+| Construct | BDZ        |  24,401,915.8967 ns |  24,662,905.1224 ns | 1.01x slower   |
+| Construct | CHM_M      |  27,335,151.4583 ns |  26,689,299.1667 ns | 1.02x faster   |
+| Construct | PTR_M      |  21,343,941.4583 ns | 186,238,146.6667 ns | 8.73x slower   |
+| Construct | FCH_M      | 470,084,043.6170 ns | 609,540,600.0000 ns | 1.30x slower   |
+
+Speedup is calculated as `old mean / new mean`.

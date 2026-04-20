@@ -4,11 +4,9 @@ namespace Genbox.FastMPH.Internals.Helpers;
 
 internal static class HashHelper
 {
-    public static HashCode<T> GetHashFunc<T>(Func<T, ulong> hashFunc) where T : notnull => (a, seed) => unchecked(hashFunc(a) * seed);
-
-    public static HashCode3<T> GetHashFunc3<T>(Func<T, ulong> hashFunc) where T : notnull => (a, seed, hashes) =>
+    public static HashCode3<T> GetHashFunc3<T>(HashFunc<T> hashFunc) where T : notnull => (a, seed, hashes) =>
     {
-        ulong h = unchecked(hashFunc(a) * seed);
+        ulong h = hashFunc(a, seed);
         hashes[0] = (uint)h;
         hashes[1] = (uint)(h >> 32);
         hashes[2] = Murmur_32(hashes[0] ^ hashes[1]);

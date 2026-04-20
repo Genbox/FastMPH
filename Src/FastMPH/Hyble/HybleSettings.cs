@@ -28,7 +28,7 @@ public sealed class HybleSettings : HashSettings
     /// <summary>
     /// Step size used while scanning displacement candidates.
     /// Must be between 1 and 57. Only the bottom 57 bits of the 64-bit displacement mask are reliable.
-    /// Default is 57.
+    /// Default is 1.
     /// </summary>
     public uint DisplacementSearchStride
     {
@@ -38,5 +38,5 @@ public sealed class HybleSettings : HashSettings
             Validator.RequireThat(value is >= 1 and <= 57);
             field = value;
         }
-    } = 57;
+    } = 1;
 }

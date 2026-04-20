@@ -1,23 +1,27 @@
-namespace Genbox.FastMPH.Internals.Compat;
+#if NETSTANDARD2_0
+// ReSharper disable CheckNamespace
+
+namespace System;
 
 internal static class ArrayExtensions
 {
     extension(Array)
     {
-        public static void Fill<T>(T[] array, T value)
+        internal static void Fill<T>(T[] array, T value)
         {
             Fill(array, value, 0, array.Length);
         }
 
-        public static void Fill<T>(T[] array, T value, int startIndex, int count)
+        internal static void Fill<T>(T[] array, T value, int startIndex, int count)
         {
             for (int i = startIndex; i < startIndex + count; i++)
                 array[i] = value;
         }
 
-        public static void Clear<T>(T[] array)
+        internal static void Clear<T>(T[] array)
         {
             Fill(array, default, 0, array.Length);
         }
     }
 }
+#endif

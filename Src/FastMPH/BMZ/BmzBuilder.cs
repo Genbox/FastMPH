@@ -2,10 +2,8 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Genbox.FastMPH.Abstracts;
 using Genbox.FastMPH.Internals;
-using Genbox.FastMPH.Internals.Compat;
 using Genbox.FastMPH.Internals.Helpers;
 using JetBrains.Annotations;
-using Microsoft.Extensions.Logging;
 using static Genbox.FastMPH.Internals.BitArray;
 
 namespace Genbox.FastMPH.BMZ;
@@ -25,43 +23,53 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
     private const uint BufSize = 1024 * 64;
 
     /// <inheritdoc />
-    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, Func<TKey, ulong> hashFunc, ulong seed, [NotNullWhen(true)]out BmzMinimalState<TKey>? state, BmzMinimalSettings? settings = null)
+    public bool TryCreateMinimal(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, [NotNullWhen(true)]out BmzMinimalState<TKey>? state, BmzMinimalSettings? settings = null)
     {
         settings ??= new BmzMinimalSettings();
 
-        HashCode<TKey> hashCode = HashHelper.GetHashFunc(hashFunc);
+        if (!TryCreateMinimalState(keys.Length, settings, out IBuildState? buildState))
+        {
+            state = null;
+            return false;
+        }
 
-        BmzBuildState buildState = new BmzBuildState();
-
-        return TryCreateMinimalCore(keys, hashCode, settings, seed, buildState, out state);
+        ulong seed = RandomHelper.Next64();
+        return TryCreateMinimalCore(keys, hashFunc, seed, buildState, settings, out state);
     }
 
-    private bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashCode<TKey> hashCode, BmzMinimalSettings settings, ulong seed, BmzBuildState buildState, [NotNullWhen(true)]out BmzMinimalState<TKey>? state)
+    /// <inheritdoc />
+    public bool TryCreateMinimalState(int numKeys, BmzMinimalSettings settings, [NotNullWhen(true)]out IBuildState? state)
     {
+        if (!BuildState.TryCreate(numKeys, settings, _logger, out BuildState? typed))
+        {
+            state = null;
+            return false;
+        }
+
+        state = typed;
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryCreateMinimalCore(ReadOnlySpan<TKey> keys, HashFunc<TKey> hashFunc, ulong seed, IBuildState state, BmzMinimalSettings settings, [NotNullWhen(true)]out BmzMinimalState<TKey>? queryState)
+    {
+        if (state is not BuildState build)
+            throw new ArgumentException("Invalid build state type", nameof(state));
+
         LogCreating(keys.Length, settings.Vertices);
 
-        uint numEdges = (uint)keys.Length;
-        uint numVertices = (uint)Math.Ceiling(settings.Vertices * numEdges);
-
-        if (numVertices < 5) // workaround for small key sets
-            numVertices = 5;
-
-        buildState.EnsureForGraph(_logger, numVertices, numEdges);
-        Graph graph = buildState.Graph;
-        buildState.EnsureForVertices((int)numVertices);
-        buildState.EnsureForEdges((int)numEdges);
-        uint[] lookupTable = buildState.LookupTable;
-
-        if (!GenerateEdges(graph, numVertices, seed, keys, hashCode))
+        if (!GenerateEdges(build.Graph, build.NumVertices, seed, keys, hashFunc))
         {
             LogFailure();
-            state = null;
+            queryState = null;
             return false;
         }
 
         // Mapping step
         uint biggestGValue = 0;
         uint biggestEdgeValue = 1;
+
+        Graph graph = build.Graph;
 
         // Ordering step
         LogStartOrdering();
@@ -70,26 +78,23 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
         // Searching step
         LogStartSearching();
 
-        byte[] visited = buildState.Visited;
-        byte[] usedEdges = buildState.UsedEdges;
-
         //Genbox: Originally lookupTable (g) was allocated on each loop. I've moved it out and reuse it.
-        Array.Clear(lookupTable);
-        Array.Clear(visited);
-        Array.Clear(usedEdges);
+        Array.Clear(build.LookupTable);
+        Array.Clear(build.Visited);
+        Array.Clear(build.UsedEdges);
 
         bool restartMapping = false;
 
-        for (uint i = 0; i < numVertices; ++i) // critical nodes
+        for (uint i = 0; i < build.NumVertices; ++i) // critical nodes
         {
             //Genbox: Inverted the if-statement to reduce nesting
-            if (!graph.NodeIsCritical(i) || GetBit(visited, i))
+            if (!graph.NodeIsCritical(i) || GetBit(build.Visited, i))
                 continue;
 
             if (settings.Vertices > 1.14)
-                restartMapping = TraverseCriticalNodes(graph, lookupTable, numEdges, i, ref biggestGValue, ref biggestEdgeValue, usedEdges, visited);
+                restartMapping = TraverseCriticalNodes(graph, build.LookupTable, build.NumEdges, i, ref biggestGValue, ref biggestEdgeValue, build.UsedEdges, build.Visited);
             else
-                restartMapping = TraverseCriticalNodesHeuristic(graph, lookupTable, numEdges, i, ref biggestGValue, ref biggestEdgeValue, usedEdges, visited);
+                restartMapping = TraverseCriticalNodesHeuristic(graph, build.LookupTable, build.NumEdges, i, ref biggestGValue, ref biggestEdgeValue, build.UsedEdges, build.Visited);
 
             if (restartMapping)
                 break;
@@ -98,56 +103,23 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
         if (!restartMapping)
         {
             LogTraversingNonCriticalVertices();
-            TraverseNonCriticalNodes(graph, lookupTable, numEdges, numVertices, usedEdges, visited);
+            TraverseNonCriticalNodes(graph, build.LookupTable, build.NumEdges, build.NumVertices, build.UsedEdges, build.Visited);
         }
         else
         {
             LogFailure();
-            state = null;
+            queryState = null;
             return false;
         }
 
+        uint[] lookupTable = GC.AllocateUninitializedArray<uint>(build.LookupTable.Length);
+        Array.Copy(build.LookupTable, lookupTable, lookupTable.Length);
+        queryState = new BmzMinimalState<TKey>(build.NumVertices, seed, lookupTable, hashFunc);
         LogSuccess();
-        state = new BmzMinimalState<TKey>(numVertices, seed, lookupTable, hashCode);
         return true;
     }
 
-    private sealed class BmzBuildState
-    {
-        public Graph Graph = null!;
-        private uint _graphVertices;
-        private uint _graphEdges;
-        public uint[] LookupTable = [];
-        public byte[] Visited = [];
-        public byte[] UsedEdges = [];
-
-        public void EnsureForGraph(ILogger logger, uint numVertices, uint numEdges)
-        {
-            if (Graph == null || _graphVertices != numVertices || _graphEdges != numEdges)
-            {
-                Graph = new Graph(logger, numVertices, numEdges);
-                _graphVertices = numVertices;
-                _graphEdges = numEdges;
-            }
-        }
-
-        public void EnsureForVertices(int numVertices)
-        {
-            ArrayEnsure.EnsureCapacity(ref LookupTable, numVertices);
-
-            int visitedLength = (numVertices / 8) + 1;
-            ArrayEnsure.EnsureCapacity(ref Visited, visitedLength);
-        }
-
-        public void EnsureForEdges(int numEdges)
-        {
-
-            int usedEdgesLength = (numEdges / 8) + 1;
-            ArrayEnsure.EnsureCapacity(ref UsedEdges, usedEdgesLength);
-        }
-    }
-
-    private bool GenerateEdges<T>(Graph graph, uint numVertices, ulong seed, ReadOnlySpan<T> keys, HashCode<T> hashCode) where T : notnull
+    private bool GenerateEdges<T>(Graph graph, uint numVertices, ulong seed, ReadOnlySpan<T> keys, HashFunc<T> hashCode) where T : notnull
     {
         LogGeneratingEdges(numVertices);
         graph.ClearEdges();
@@ -421,6 +393,44 @@ public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalStat
                 SetBit(visited, i);
                 Traverse(graph, g, usedEdges, i, ref unusedEdgeIndex, visited);
             }
+        }
+    }
+
+    private sealed class BuildState : IBuildState
+    {
+        public Graph Graph = null!;
+        public uint[] LookupTable = [];
+        public byte[] Visited = [];
+        public byte[] UsedEdges = [];
+        public uint NumEdges;
+        public uint NumVertices;
+
+        public static bool TryCreate(int keysLength, BmzMinimalSettings settings, Microsoft.Extensions.Logging.ILogger logger, [NotNullWhen(true)]out BuildState? state)
+        {
+            uint numEdges = (uint)keysLength;
+            uint numVertices = (uint)Math.Ceiling(settings.Vertices * numEdges);
+
+            if (numVertices < 5)
+                numVertices = 5;
+
+            state = new BuildState
+            {
+                NumEdges = numEdges,
+                NumVertices = numVertices,
+                Graph = new Graph(logger, numVertices, numEdges),
+                LookupTable = GC.AllocateUninitializedArray<uint>((int)numVertices),
+                Visited = GC.AllocateUninitializedArray<byte>(((int)numVertices / 8) + 1),
+                UsedEdges = GC.AllocateUninitializedArray<byte>(((int)numEdges / 8) + 1)
+            };
+
+            return true;
+        }
+
+        public void Reset()
+        {
+            Array.Clear(LookupTable, 0, LookupTable.Length);
+            Array.Clear(Visited, 0, Visited.Length);
+            Array.Clear(UsedEdges, 0, UsedEdges.Length);
         }
     }
 

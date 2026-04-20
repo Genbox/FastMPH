@@ -8,18 +8,18 @@ namespace Genbox.FastMPH.BDZ;
 
 /// <summary>Contains the state of a BDZ minimal perfect hash function</summary>
 [PublicAPI]
-public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnull
+public sealed class BdzMinimalState<TKey> : IQueryState<TKey> where TKey : notnull
 {
     private readonly HashCode3<TKey> _hashCode;
 
-    internal BdzMinimalState(uint numPartitions, byte[] lookupTable, ulong seed, byte bitsOfKey, uint[] rankTable, HashCode3<TKey> hashCode)
+    internal BdzMinimalState(ulong seed, uint numPartitions, byte bitsOfKey, byte[] lookupTable, uint[] rankTable, HashFunc<TKey> hashFunc)
     {
-        _hashCode = hashCode;
-        NumPartitions = numPartitions;
-        LookupTable = lookupTable;
         Seed = seed;
+        NumPartitions = numPartitions;
         BitsOfKey = bitsOfKey;
+        LookupTable = lookupTable;
         RankTable = rankTable;
+        _hashCode = HashHelper.GetHashFunc3(hashFunc);
     }
 
     /// <summary>The number of partitions</summary>
@@ -31,7 +31,7 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     /// <summary>The seed that was used for the hash function</summary>
     public ulong Seed { get; }
 
-    /// <summary>The number of bits per key. It determines the amount of information in the rank table. Larger values means more compact hash functions, but slower evaluation time.</summary>
+    /// <summary>The number of bits per key used for the rank table.</summary>
     public byte BitsOfKey { get; }
 
     /// <summary>The rank table</summary>
@@ -57,7 +57,6 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
         SpanWriter sw = new SpanWriter(buffer);
         sw.WriteUInt64(Seed);
         sw.WriteUInt32(NumPartitions);
-
         sw.WriteUInt32Array(RankTable);
         sw.WriteByte(BitsOfKey);
         sw.WriteByteArray(LookupTable);
@@ -68,43 +67,39 @@ public sealed class BdzMinimalState<TKey> : IHashState<TKey> where TKey : notnul
     {
         uint size = sizeof(ulong) + //Seed
                     sizeof(uint) + //NumPartitions
-                    sizeof(uint) + //LookupTable length
-                    (sizeof(byte) * (uint)LookupTable.Length) + //LookupTable
                     sizeof(uint) + //RankTable length
                     (sizeof(uint) * (uint)RankTable.Length) + //RankTable
-                    sizeof(byte); //NumBitsOfKey
+                    sizeof(byte) + //NumBitsOfKey
+                    sizeof(uint) + //LookupTable length
+                    (sizeof(byte) * (uint)LookupTable.Length); //LookupTable
 
         return size;
     }
 
     /// <summary>
-    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BdzState{TKey}" />
+    /// Deserialize a serialized minimal perfect hash function into a new instance of <see cref="BdzMinimalState{TKey}" />
     /// </summary>
     /// <param name="packed">The serialized hash function</param>
-    /// <param name="hashFunc">The hash function that was used when creating the hash function.</param>
-    public static BdzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, Func<TKey, ulong> hashFunc)
+    public static BdzMinimalState<TKey> Unpack(ReadOnlySpan<byte> packed, HashFunc<TKey> hashFunc)
     {
         SpanReader sr = new SpanReader(packed);
-
         ulong seed = sr.ReadUInt64();
         uint numPartitions = sr.ReadUInt32();
-
         uint[] rankTable = sr.ReadUInt32Array();
         byte numBitsOfKey = sr.ReadByte();
         byte[] lookupTable = sr.ReadByteArray();
 
-        return new BdzMinimalState<TKey>(numPartitions, lookupTable, seed, numBitsOfKey, rankTable, HashHelper.GetHashFunc3(hashFunc));
+        return new BdzMinimalState<TKey>(seed, numPartitions, numBitsOfKey, lookupTable, rankTable, hashFunc);
     }
 
-    private static uint Rank(uint numBitsOfKey, uint[] rankTable, byte[] lookupTable, uint vertex)
+    private static uint Rank(byte numBitsOfKey, uint[] rankTable, byte[] lookupTable, uint vertex)
     {
-        uint index = vertex >> (int)numBitsOfKey;
+        uint index = vertex >> numBitsOfKey;
         uint baseRank = rankTable[index];
-        uint begIdxV = index << (int)numBitsOfKey;
+        uint begIdxV = index << numBitsOfKey;
         uint begIdxB = begIdxV >> 2;
         uint endIdxB = vertex >> 2;
 
-        //Genbox: made the lookup table lazy loaded
         byte[] table = BdzShared.LookupTable.Value;
 
         while (begIdxB < endIdxB)

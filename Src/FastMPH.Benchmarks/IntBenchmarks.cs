@@ -1,7 +1,6 @@
 using System.Collections.Frozen;
 using System.Reflection;
 using BenchmarkDotNet.Order;
-using Genbox.FastMPH;
 using Genbox.FastMPH.BDZ;
 using Genbox.FastMPH.BBHash;
 using Genbox.FastMPH.BMZ;
@@ -21,7 +20,7 @@ namespace Genbox.FastMPH.Benchmarks;
 public class IntBenchmarks
 {
     private const int Capacity = 100_000;
-    private static readonly Func<int, ulong> _intHash = value => unchecked((ulong)value.GetHashCode());
+    private static readonly HashFunc<int> _intHash = (value, seed) => unchecked((ulong)value.GetHashCode() ^ seed);
 
     public delegate object CFunc(ReadOnlySpan<int> data);
 

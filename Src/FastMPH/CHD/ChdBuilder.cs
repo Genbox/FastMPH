@@ -88,6 +88,14 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
     /// <inheritdoc />
     public bool TryCreateMinimalState(int numKeys, ChdMinimalSettings settings, [NotNullWhen(true)]out IBuildState? state)
     {
+        // The CHD minimal rank step reads the occupancy table as a bitset. When KeysPerBin > 1,
+        // CHD uses per-bin byte counters instead, so the representation is incompatible.
+        if (settings.KeysPerBin != 1)
+        {
+            state = null;
+            return false;
+        }
+
         if (!BuildState.TryCreate(numKeys, settings, out BuildState? typed))
         {
             state = null;
@@ -103,6 +111,13 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
     {
         if (state is not BuildState build)
             throw new ArgumentException("Invalid build state type", nameof(state));
+
+        // Keep this guard in Core as well because callers can invoke it directly with a reused build state.
+        if (settings.KeysPerBin != 1)
+        {
+            queryState = null;
+            return false;
+        }
 
         if (!TryCreateCoreInternal(keys, HashHelper.GetHashFunc3(hashFunc), hashFunc, seed, settings, build, out ChdState<TKey>? phState))
         {

@@ -66,7 +66,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         uint[] sortedIndexes = Ordering(buckets);
 
         LogSearchingStep();
-        if (Searching(buckets, sortedIndexes, build.LookupTable, build.NumItems, hashFunc, seed, settings.MaxSearchingIterations, settings.MaxSeedGenerationIterations, build.MapTable, build.RandomTable, build.StampTable, out ulong seed1))
+        if (Searching(buckets, sortedIndexes, build.LookupTable, build.NumItems, hashFunc, seed, settings.MaxSearchingIterations, settings.MaxSeedGenerationIterations, build.MapTable, build.RandomTable, build.StampTable, ref build.Stamp, out ulong seed1))
         {
             LogFailed();
             queryState = null;
@@ -106,7 +106,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
 
     private static uint[] Ordering<T>(Buckets<T> buckets) => buckets.GetIndexesSortedBySize();
 
-    private bool Searching<T>(Buckets<T> buckets, uint[] sortedIndexes, uint[] lookupTable, uint m, HashFunc<T> hashCode, ulong seed0, uint maxSearchingIterations, uint maxSeedGenerationIterations, uint[] mapTable, uint[] randomTable, byte[] stampTable, out ulong seed) where T : notnull
+    private bool Searching<T>(Buckets<T> buckets, uint[] sortedIndexes, uint[] lookupTable, uint m, HashFunc<T> hashCode, ulong seed0, uint maxSearchingIterations, uint maxSeedGenerationIterations, uint[] mapTable, uint[] randomTable, byte[] stampTable, ref byte stamp, out ulong seed) where T : notnull
     {
         uint iterationToGenerateH2 = 0;
         uint searchingIterations = 0;
@@ -127,7 +127,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         do
         {
             seed = GetNextSeed(ref seedState);
-            restart = CheckForCollisionsH2(m, seed, buckets, sortedIndexes, hashCode, stampTable);
+            restart = CheckForCollisionsH2(m, seed, buckets, sortedIndexes, hashCode, stampTable, ref stamp);
             uint filledCount = 0;
 
             if (!restart)
@@ -221,10 +221,9 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
     }
 
     /* Check whether function h2 causes collisions among the keys of each bucket */
-    private bool CheckForCollisionsH2<T>(uint m, ulong seed, Buckets<T> buckets, uint[] sortedIndexes, HashFunc<T> hashCode, byte[] stampTable)
+    private bool CheckForCollisionsH2<T>(uint m, ulong seed, Buckets<T> buckets, uint[] sortedIndexes, HashFunc<T> hashCode, byte[] stampTable, ref byte stamp)
     {
         uint numBuckets = buckets.GetNumBuckets();
-        byte stamp = 1;
 
         for (int i = 0; i < numBuckets; i++)
         {
@@ -288,6 +287,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         public uint B;
         public uint P1;
         public uint P2;
+        public byte Stamp;
 
         public static bool TryCreate(int keysLength, FchMinimalSettings settings, [NotNullWhen(true)]out BuildState? state)
         {
@@ -317,6 +317,7 @@ public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMini
         {
             Array.Clear(LookupTable, 0, LookupTable.Length);
             Array.Clear(StampTable, 0, StampTable.Length);
+            Stamp = 0;
         }
     }
 

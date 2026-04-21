@@ -237,6 +237,9 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
         for (int k = 0; k < maxBucketSize + 1; k++)
             sortedLists[k] = new SortedList();
 
+        if (maxBucketSize == 0)
+            return sortedLists;
+
         uint i;
         uint bucketSize;
 

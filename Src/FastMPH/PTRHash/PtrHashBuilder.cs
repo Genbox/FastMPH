@@ -119,6 +119,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
                     seed,
                     settings,
                     build.EvictionQueue,
+                    ref build.SlotMarkId,
                     build.BucketsPerPart,
                     build.SlotsPerPart,
                     build.SlotMultiplier,
@@ -169,6 +170,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         ulong seed,
         PtrHashMinimalSettings settings,
         PriorityQueue<int, int> evictionQueue,
+        ref int slotMarkId,
         uint bucketsPerPart,
         uint slotsPerPart,
         ulong slotMultiplier,
@@ -200,7 +202,8 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
                 pilots,
                 candidateSlots,
                 collidedBuckets,
-                slotMarks))
+                slotMarks,
+                ref slotMarkId))
             return true;
 
         if (!settings.EnableEviction)
@@ -238,7 +241,8 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
                     pilots,
                     candidateSlots,
                     collidedBuckets,
-                    slotMarks))
+                    slotMarks,
+                    ref slotMarkId))
                 continue;
 
             if (!TryFindBestPilot(
@@ -259,6 +263,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
                     bestCollidedBuckets,
                     recentBuckets,
                     slotMarks,
+                    ref slotMarkId,
                     out uint selectedPilot,
                     out int collisionCount,
                     out int slotCount))
@@ -319,10 +324,10 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         byte[] pilots,
         int[] candidateSlots,
         int[] collidedBuckets,
-        int[] slotMarks)
+        int[] slotMarks,
+        ref int markId)
     {
         int slotCount = bucketCounts[bucket];
-        int markId = 0;
 
         for (uint pilot = 0; pilot < maxPilot; pilot++)
         {
@@ -382,6 +387,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         int[] bestCollidedBuckets,
         int[] recentBuckets,
         int[] slotMarks,
+        ref int markId,
         out uint selectedPilot,
         out int selectedCollisionCount,
         out int selectedSlotCount)
@@ -398,8 +404,6 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
             startPilot = (uint)(HashHelper.Mix64((uint)bucket ^ seed) % maxPilot);
 
         int bucketSize = bucketCounts[bucket];
-        int markId = 0;
-
         for (uint delta = 0; delta < maxPilot; delta++)
         {
             uint pilot = startPilot + delta;
@@ -618,6 +622,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         public int[] CollidedBuckets = [];
         public int[] BestCollidedBuckets = [];
         public int[] SlotMarks = [];
+        public int SlotMarkId;
         public PriorityQueue<int, int> EvictionQueue = new PriorityQueue<int, int>();
         public ulong SlotMultiplier;
         public uint NumBuckets;
@@ -691,6 +696,8 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
             Array.Clear(BucketCounts, 0, BucketCounts.Length);
             Array.Clear(BucketOffsets, 0, BucketOffsets.Length);
             Array.Clear(BucketOwnedCounts, 0, BucketOwnedCounts.Length);
+            Array.Clear(SlotMarks, 0, SlotMarks.Length);
+            SlotMarkId = 0;
             for (int i = 0; i < SlotOwners.Length; i++)
                 SlotOwners[i] = -1;
             Array.Clear(Pilots, 0, Pilots.Length);

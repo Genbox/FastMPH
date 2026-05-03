@@ -10,8 +10,15 @@ internal static class BbHashShared
     public static uint GetLevelHash<TKey>(TKey key, uint level, ulong seed, HashFunc<TKey> hashCode)
     {
         ulong h = hashCode(key, seed);
-        uint s0 = (uint)((uint)h | ((ulong)(uint)h << 32));
-        uint s1 = (uint)((h >> 32) | ((h >> 32) << 32));
+        uint s0 = (uint)h;
+        uint s1 = (uint)(h >> 32);
+
+        // Ensure the XorShift state is never all-zero (absorbing state)
+        if ((s0 | s1) == 0)
+        {
+            s0 = 1;
+            s1 = 1;
+        }
 
         if (level == 0)
             return s0;

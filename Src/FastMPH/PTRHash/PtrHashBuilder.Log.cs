@@ -17,7 +17,4 @@ public sealed partial class PtrHashBuilder<TKey> where TKey : notnull
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Successfully created PTRHash with seed {seed}")]
     private partial void LogSuccess(ulong seed);
-
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Failed to create PTRHash")]
-    private partial void LogFailure();
 }

@@ -39,6 +39,6 @@ public partial class BmzBuilder<TKey>
     [LoggerMessage(Level = LogLevel.Debug, Message = "Successfully generated BMZ hash function")]
     private partial void LogSuccess();
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Failed to generated BMZ hash function")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Failed to generate BMZ hash function")]
     private partial void LogFailure();
 }

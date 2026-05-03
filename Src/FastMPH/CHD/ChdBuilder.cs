@@ -383,7 +383,7 @@ public sealed partial class ChdBuilder<TKey> : IMinimalHashBuilder<TKey, ChdMini
                     {
                         dispTable[buckets[currBucket].BucketId] = probe0Num + (probe1Num * numBins);
                         placedBuckets[buckets[currBucket].BucketId] = 1;
-                        LogDisplacement(currBucket, dispTable[currBucket]);
+                        LogDisplacement(currBucket, dispTable[buckets[currBucket].BucketId]);
                     }
                     else
                     {

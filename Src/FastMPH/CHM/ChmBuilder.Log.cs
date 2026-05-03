@@ -12,13 +12,13 @@ public partial class ChmBuilder<TKey>
     [LoggerMessage(Level = LogLevel.Debug, Message = "Creating CHM with {numKeys} keys. c = {c}")]
     private partial void LogCreating(int numKeys, double c);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Staring mapping step")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Starting mapping step")]
     private partial void LogMappingStep();
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Failed to generate function")]
     private partial void LogFailed();
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Staring assignment step")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Starting assignment step")]
     private partial void LogAssignmentStep();
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Visiting edge {nodeA}->{nodeB} with id {nodeId}")]

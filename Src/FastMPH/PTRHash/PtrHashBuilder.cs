@@ -152,19 +152,6 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         return true;
     }
 
-    private static void BuildBucketOwnedCounts(int[] slotOwners, int[] bucketOwnedCounts)
-    {
-        Array.Clear(bucketOwnedCounts, 0, bucketOwnedCounts.Length);
-
-        for (int i = 0; i < slotOwners.Length; i++)
-        {
-            int owner = slotOwners[i];
-
-            if (owner >= 0)
-                bucketOwnedCounts[owner]++;
-        }
-    }
-
     private static bool TryPlaceBucket(
         int initialBucket,
         ulong seed,
@@ -336,7 +323,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
             bool valid = TryEvaluatePilot(
                 bucket,
                 seed,
-                pilot,
+                (byte)pilot,
                 bucketsPerPart,
                 slotsPerPart,
                 slotMultiplier,
@@ -415,7 +402,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
             bool valid = TryEvaluatePilot(
                 bucket,
                 seed,
-                pilot,
+                (byte)pilot,
                 bucketsPerPart,
                 slotsPerPart,
                 slotMultiplier,
@@ -458,7 +445,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
     private static bool TryEvaluatePilot(
         int bucket,
         ulong seed,
-        uint pilot,
+        byte pilot,
         uint bucketsPerPart,
         uint slotsPerPart,
         ulong slotMultiplier,
@@ -555,7 +542,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
     private static void ClearBucketSlots(
         int bucket,
         ulong seed,
-        uint pilot,
+        byte pilot,
         uint bucketsPerPart,
         uint slotsPerPart,
         ulong slotMultiplier,
@@ -615,7 +602,6 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         public int[] BucketKeyIndices = [];
         public int[] BucketOrder = [];
         public int[] SlotOwners = [];
-        public int[] BucketOwnedCounts = [];
         public int[] RecentBuckets = [];
         public int[] CandidateSlots = [];
         public int[] BestSlots = [];
@@ -668,7 +654,6 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
                 BucketStarts = GC.AllocateUninitializedArray<int>((int)numBuckets + 1),
                 BucketOffsets = GC.AllocateUninitializedArray<int>((int)numBuckets),
                 BucketOrder = GC.AllocateUninitializedArray<int>((int)numBuckets),
-                BucketOwnedCounts = GC.AllocateUninitializedArray<int>((int)numBuckets),
                 Pilots = GC.AllocateUninitializedArray<byte>((int)numBuckets),
                 SlotOwners = GC.AllocateUninitializedArray<int>((int)numSlots),
                 SlotMarks = GC.AllocateUninitializedArray<int>((int)numSlots),
@@ -695,7 +680,6 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         {
             Array.Clear(BucketCounts, 0, BucketCounts.Length);
             Array.Clear(BucketOffsets, 0, BucketOffsets.Length);
-            Array.Clear(BucketOwnedCounts, 0, BucketOwnedCounts.Length);
             Array.Clear(SlotMarks, 0, SlotMarks.Length);
             SlotMarkId = 0;
             for (int i = 0; i < SlotOwners.Length; i++)
@@ -735,7 +719,7 @@ public sealed partial class PtrHashBuilder<TKey> : IMinimalHashBuilder<TKey, Ptr
         return (uint)Math.BigMul(lowBits, range, out _);
     }
 
-    private static ulong PilotMix(uint pilot, ulong seed) => unchecked(0x517CC1B727220A95UL * (pilot ^ seed));
+    private static ulong PilotMix(byte pilot, ulong seed) => unchecked(0x517CC1B727220A95UL * (pilot ^ seed));
 
     private static ulong ApplyBucketFunction(ulong hash, PtrHashBucketFunction bucketFunction) => bucketFunction switch
     {

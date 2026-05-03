@@ -209,10 +209,6 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
     private static ulong ReadMask(byte[] bitmap, int bitIndex)
     {
         int byteIndex = bitIndex >> 3;
-
-        if (byteIndex > bitmap.Length - sizeof(ulong))
-            return 0;
-
         ulong value = BinaryPrimitives.ReadUInt64LittleEndian(bitmap.AsSpan(byteIndex, sizeof(ulong)));
         return value >> (bitIndex & 7);
     }
@@ -286,7 +282,7 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
             if (numKeys == 0)
             {
                 ulong emptyBitmapBits = 1 + (ulong)ushort.MaxValue;
-                int emptyBitmapByteLength = (int)((emptyBitmapBits + 7) / 8);
+                int emptyBitmapByteLength = (int)((emptyBitmapBits + 7) / 8) + 7;
 
                 state = new BuildState
                 {
@@ -315,7 +311,7 @@ public sealed partial class HybleBuilder<TKey> : IHashBuilder<TKey, HybleState<T
                 return false;
 
             ulong bitmapBits = approxRange + (ulong)ushort.MaxValue;
-            int bitmapByteLength = (int)((bitmapBits + 7) / 8);
+            int bitmapByteLength = (int)((bitmapBits + 7) / 8) + 7; // +7 padding for 8-byte ReadMask reads near the end
 
             state = new BuildState
             {

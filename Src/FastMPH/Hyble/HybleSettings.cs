@@ -38,5 +38,5 @@ public sealed class HybleSettings : HashSettings
             Validator.RequireThat(value is >= 1 and <= 57);
             field = value;
         }
-    } = 1;
+    } = 57;
 }

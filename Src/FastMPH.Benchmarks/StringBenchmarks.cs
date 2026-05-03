@@ -148,6 +148,9 @@ public class StringBenchmarks
         Validator.RequireThat(new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimalWithRetry(_data, _stringHash, out BbHashMinimalState<string>? bbPre));
         yield return ["BB_M", BitsPerItem(bbPre.GetPackedSize()), new CFunc(data => new BbHashBuilder<string>(NullLogger<BbHashBuilder<string>>.Instance).TryCreateMinimalWithRetry(data, _stringHash, out _, new BbHashMinimalSettings()))];
 
+        Validator.RequireThat(new PtrHashBuilder<string>(NullLogger<PtrHashBuilder<string>>.Instance).TryCreateMinimalWithRetry(_data, _stringHash, out PtrHashMinimalState<string>? ptrPre));
+        yield return ["PTR_M", BitsPerItem(ptrPre.GetPackedSize()), new CFunc(data => new PtrHashBuilder<string>(NullLogger<PtrHashBuilder<string>>.Instance).TryCreateMinimalWithRetry(data, _stringHash, out _, new PtrHashMinimalSettings()))];
+
         Validator.RequireThat(new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreateWithRetry(_data, _stringHash, out HybleState<string>? hyblePre));
         yield return ["HYBLE", BitsPerItem(hyblePre.GetPackedSize()), new CFunc(data => new HybleBuilder<string>(NullLogger<HybleBuilder<string>>.Instance).TryCreateWithRetry(data, _stringHash, out _, new HybleSettings()))];
     }

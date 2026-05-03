@@ -1,7 +1,18 @@
-﻿namespace Genbox.FastMPH.Internals.Helpers;
+﻿using System.Buffers.Binary;
 
-public static class RandomHelper
+namespace Genbox.FastMPH.Internals.Helpers;
+
+internal static class RandomHelper
 {
-    private static readonly Random _rng = new Random(42);
-    public static ulong Next64() => ((ulong)(uint)_rng.Next() << 32) | (uint)_rng.Next();
+    [ThreadStatic]
+    private static Random? _rng;
+
+    private static Random GetRng() => _rng ??= new Random(42 + Environment.CurrentManagedThreadId);
+
+    public static ulong Next64()
+    {
+        Span<byte> buf = stackalloc byte[sizeof(ulong)];
+        GetRng().NextBytes(buf);
+        return BinaryPrimitives.ReadUInt64LittleEndian(buf);
+    }
 }

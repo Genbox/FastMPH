@@ -33,11 +33,12 @@ public class IntBenchmarks
     public void PrepareData()
     {
         // Unique integers from a deterministic RNG
+        Random rng = new Random(42);
         HashSet<int> seen = new HashSet<int>(Capacity);
         List<int> keys = new List<int>(Capacity);
         while (keys.Count < Capacity)
         {
-            int v = Random.Shared.Next();
+            int v = rng.Next();
             if (seen.Add(v))
                 keys.Add(v);
         }

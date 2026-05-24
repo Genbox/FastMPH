@@ -18,6 +18,7 @@ namespace Genbox.FastMPH.CHM;
 /// </list>
 /// </summary>
 [PublicAPI]
+[SuppressMessage("Minor Code Smell", "S2325:Methods and properties that don\'t access instance data should be static")]
 public sealed partial class ChmBuilder<TKey> : IMinimalHashBuilder<TKey, ChmMinimalState<TKey>, ChmMinimalSettings> where TKey : notnull
 {
     /// <inheritdoc />

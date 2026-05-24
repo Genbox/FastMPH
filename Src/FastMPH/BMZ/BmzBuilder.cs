@@ -18,6 +18,7 @@ namespace Genbox.FastMPH.BMZ;
 /// </list>
 /// </summary>
 [PublicAPI]
+[SuppressMessage("Minor Code Smell", "S2325:Methods and properties that don\'t access instance data should be static")]
 public partial class BmzBuilder<TKey> : IMinimalHashBuilder<TKey, BmzMinimalState<TKey>, BmzMinimalSettings> where TKey : notnull
 {
     private const uint BufSize = 1024 * 64;

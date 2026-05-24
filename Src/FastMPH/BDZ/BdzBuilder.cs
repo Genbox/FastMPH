@@ -17,6 +17,7 @@ namespace Genbox.FastMPH.BDZ;
 /// </list>
 /// </summary>
 [PublicAPI]
+[SuppressMessage("Minor Code Smell", "S2325:Methods and properties that don\'t access instance data should be static")]
 public sealed partial class BdzBuilder<TKey> : IMinimalHashBuilder<TKey, BdzMinimalState<TKey>, BdzMinimalSettings>, IHashBuilder<TKey, BdzState<TKey>, BdzSettings> where TKey : notnull
 {
     /// <inheritdoc />

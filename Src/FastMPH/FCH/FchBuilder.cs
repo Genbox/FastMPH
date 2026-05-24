@@ -17,6 +17,7 @@ namespace Genbox.FastMPH.FCH;
 /// </list>
 /// </summary>
 [PublicAPI]
+[SuppressMessage("Minor Code Smell", "S2325:Methods and properties that don\'t access instance data should be static")]
 public sealed partial class FchBuilder<TKey> : IMinimalHashBuilder<TKey, FchMinimalState<TKey>, FchMinimalSettings> where TKey : notnull
 {
     private const uint Index = 0;

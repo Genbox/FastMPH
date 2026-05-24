@@ -1,4 +1,4 @@
-﻿namespace Genbox.FastMPH.Abstracts;
+namespace Genbox.FastMPH.Abstracts;
 
 public interface IBuildState
 {

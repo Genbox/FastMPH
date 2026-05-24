@@ -1,4 +1,4 @@
-﻿namespace Genbox.FastMPH.Tests.Misc;
+namespace Genbox.FastMPH.Tests.Misc;
 
 public static class StringHelper
 {

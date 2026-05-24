@@ -1,4 +1,4 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 
 namespace Genbox.FastMPH.Internals.Extensions;
 

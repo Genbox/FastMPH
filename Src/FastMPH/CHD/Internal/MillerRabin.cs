@@ -1,4 +1,4 @@
-﻿namespace Genbox.FastMPH.CHD.Internal;
+namespace Genbox.FastMPH.CHD.Internal;
 
 internal static class MillerRabin
 {

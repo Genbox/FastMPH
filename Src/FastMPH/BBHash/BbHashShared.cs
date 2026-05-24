@@ -1,4 +1,4 @@
-﻿using Genbox.FastMPH.Internals;
+using Genbox.FastMPH.Internals;
 
 namespace Genbox.FastMPH.BBHash;
 

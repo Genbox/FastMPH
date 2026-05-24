@@ -1,9 +1,8 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
   <PropertyGroup>
-    <Description>A collection of high performance minimal perfect hash function.</Description>
-    <PackageTags>mphf;minimal-perfect-hash;perfect-hash;hashing;cmph;data-structures</PackageTags>
-    <PackageLicenseExpression>MIT OR LGPL-3.0-or-later</PackageLicenseExpression>
+    <Description>TODO</Description>
+    <PackageTags>TODO</PackageTags>
   </PropertyGroup>
 
 </Project>
